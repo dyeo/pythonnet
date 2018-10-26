@@ -299,6 +299,10 @@ UnityEngine.Debug.Log('>>>>>>>>> Done with PythonEngine.Initialized threading.cu
 #endif
         }
 
+
+        public delegate void ShutdownDelegate();
+        public static ShutdownDelegate ShutdownHandler;
+
         /// <summary>
         /// Shutdown Method
         /// </summary>
@@ -311,13 +315,21 @@ UnityEngine.Debug.Log('>>>>>>>>> Done with PythonEngine.Initialized threading.cu
         {
             if (initialized)
             {
+                ShutdownHandler();
+
                 //////////////////dltrace/////////////////////
-/*                Exec(@"
-import UnityEngine
-import threading
-UnityEngine.Debug.Log('>>>>>>>>> In PythonEngine.Shutdown() threading.current_thread() = %s'%threading.current_thread())
+/*                
+                Exec(@"
+import sys
+server_path = 'D:/GoogleDrive/ImgSpc/ut/Uni-67748 Brainstorm ideas SG integration, artist can use SG 247/rpyc/pollingServer'
+
+if server_path not in sys.path:
+  sys.path.append(server_path)
+
+import pollingServer_unity
+pollingServer_unity.stop()
 ");
-*/
+*/                
                 //////////////////dltrace/////////////////////
 
                 //////////////////dltrace/////////////////////
@@ -374,6 +386,11 @@ UnityEngine.Debug.Log('>>>>>>>>> Back from python cleanup')
                 _programName = IntPtr.Zero;
                 Marshal.FreeHGlobal(_pythonPath);
                 _pythonPath = IntPtr.Zero;
+
+                Exec(@"
+import UnityEngine
+UnityEngine.Debug.Log('Python.NET is finalizing the runtime')
+");
 
                 Runtime.Shutdown();
 
