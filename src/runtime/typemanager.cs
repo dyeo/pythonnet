@@ -512,10 +512,6 @@ namespace Python.Runtime
                             return I386;
                         case MachineType.x86_64:
                             return X86_64;
-                        case MachineType.armv7l:
-                            return Armv7l;
-                        case MachineType.armv8:
-                            return Armv8;
                         default:
                             throw new NotImplementedException($"No support for {Runtime.MachineName}");
                     }
