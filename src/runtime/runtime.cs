@@ -90,8 +90,11 @@ namespace Python.Runtime
         internal const string dllDirectory = "Library/conda/lib/";
         internal const string pythonlib = "python3.7m";
 #elif MONO_MAC
-        internal const string dllDirectory = "/Library/Frameworks.Python.framework/Versions/3.7/lib/";
+        internal const string dllDirectory = "/Library/PythonInstall/lib/";
         internal const string pythonlib = "python3.7m";
+#else //windows
+        internal const string dllDirectory = "Library/PythonInstall/";
+        internal const string pythonlib = "python37";
 #endif
         public static readonly int pyversionnumber = Convert.ToInt32(_pyver);
 
