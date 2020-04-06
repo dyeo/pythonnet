@@ -99,8 +99,8 @@ namespace Python.Runtime
 #if MONO_LINUX
         internal const string dllDirectory = "Library/conda/lib/";
         internal const string pythonlib = "python3.7m";
-#elif MONO_MAC
-        internal const string dllDirectory = "/Library/PythonInstall/lib/";
+#elif MONO_OSX
+        internal const string dllDirectory = "Library/PythonInstall/lib/";
         internal const string pythonlib = "python3.7m";
 #else //windows
         internal const string dllDirectory = "Library/PythonInstall/";
