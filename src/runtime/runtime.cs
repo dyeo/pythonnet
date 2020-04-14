@@ -91,13 +91,14 @@ namespace Python.Runtime
 
         public static readonly string PythonDLL = _PythonDll;
 
-#if PYTHON_WITHOUT_ENABLE_SHARED && !NETSTANDARD
+// #if PYTHON_WITHOUT_ENABLE_SHARED && !NETSTANDARD
+#if MONO_LINUX || MONO_OSX
         internal const string _PythonDll = "__Internal";
 #else
         internal const string _PythonDll = dllBase + dllWithPyDebug + dllWithPyMalloc;
 #endif
 #if MONO_LINUX
-        internal const string dllDirectory = "Library/conda/lib/";
+        internal const string dllDirectory = "Library/PythonInstall/lib/";
         internal const string pythonlib = "python3.7m";
 #elif MONO_OSX
         internal const string dllDirectory = "Library/PythonInstall/lib/";
