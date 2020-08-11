@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using Python.Runtime.Platform;
 
 namespace Python.Runtime
 {
@@ -155,7 +156,7 @@ namespace Python.Runtime
         {
             if (!libraryLoaded)
             {
-                var _loader = Python.Runtime.Platform.LibraryLoader.Get(Runtime.OperatingSystem);
+                var _loader = Python.Runtime.Platform.LibraryLoader.Get(NativeCodePageHelper.OperatingSystem);
                 _loader.Load(Runtime.pythonlib, Runtime.dllDirectory);
                 libraryLoaded = true;
             }
@@ -171,12 +172,17 @@ namespace Python.Runtime
             Initialize(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode, fromPython: fromPython);
         }
 
-        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false)
+        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
         {
             if (!initialized)
             {
                 InitializeLibrary();
-                Initialize2(args,setSysArgv, initSigs);
+#if !NETSTANDARD
+                Initialize2(args,setSysArgv, initSigs, ShutdownMode.Reload);
+#else
+                Initialize2(args,setSysArgv, initSigs, ShutdownMode.Normal);
+#endif
+
             }
         }
 
