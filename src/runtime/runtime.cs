@@ -100,9 +100,6 @@ namespace Python.Runtime
 #if MONO_LINUX || MONO_MAC
         internal const string dllDirectory = "Library/PythonInstall/lib/";
         internal const string pythonlib = "python3.7m";
-// #elif MONO_MAC
-//         internal const string dllDirectory = "Library/PythonInstall/lib/";
-//         internal const string pythonlib = "python3.7m";
 #else //windows
         internal const string dllDirectory = "Library/PythonInstall/";
         internal const string pythonlib = "python37";
