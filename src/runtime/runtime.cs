@@ -96,7 +96,6 @@ namespace Python.Runtime
         internal const string dllDirectory = "Library/PythonInstall/";
         internal const string pythonlib = "python37";
 #endif
-        public static readonly int pyversionnumber = Convert.ToInt32(_pyver);
 
         // set to true when python is finalizing
         internal static object IsFinalizingLock = new object();

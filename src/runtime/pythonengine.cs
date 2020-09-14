@@ -169,7 +169,7 @@ namespace Python.Runtime
 
         public static void Initialize(bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default, bool fromPython = false)
         {
-            Initialize(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode, fromPython: fromPython);
+            Initialize2(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode, fromPython: fromPython);
         }
 
         public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
