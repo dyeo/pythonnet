@@ -167,22 +167,17 @@ namespace Python.Runtime
             Initialize(setSysArgv: true);
         }
 
-        public static void Initialize(bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default, bool fromPython = false)
+        public static void Initialize(bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Reload, bool fromPython = false)
         {
             Initialize2(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode, fromPython: fromPython);
         }
 
-        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
+        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Reload)
         {
             if (!initialized)
             {
                 InitializeLibrary();
-#if !NETSTANDARD
                 Initialize2(args,setSysArgv, initSigs, ShutdownMode.Reload);
-#else
-                Initialize2(args,setSysArgv, initSigs, ShutdownMode.Normal);
-#endif
-
             }
         }
 
@@ -196,7 +191,7 @@ namespace Python.Runtime
         /// interpreter lock (GIL) to call this method.
         /// initSigs can be set to 1 to do default python signal configuration. This will override the way signals are handled by the application.
         /// </remarks>
-        public static void Initialize2(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default, bool fromPython = false)
+        public static void Initialize2(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Reload, bool fromPython = false)
         {
             if (initialized)
             {
