@@ -353,6 +353,13 @@ namespace Python.Runtime
             }
         }
 
+        static void trace(string msg)
+        {
+            var timestamp = DateTime.UtcNow.ToString("HH:mm:ss.ffff");
+            System.Console.WriteLine($"[Pythonnet] {timestamp}  {msg}");
+            System.Console.Out.Flush();
+        }
+
         internal static void Shutdown(ShutdownMode mode)
         {
             if (Py_IsInitialized() == 0 || !_isInitialized)
@@ -365,11 +372,13 @@ namespace Python.Runtime
             // during Initialization, we need to validate it; we can only downgrade,
             // not upgrade the shutdown mode.
             mode = TryDowngradeShutdown(mode);
+            trace($"shutting down in mode {mode}");
 
             var state = PyGILState_Ensure();
 
             if (mode == ShutdownMode.Soft)
             {
+                trace("runinig atExits");
                 RunExitFuncs();
             }
             if (mode == ShutdownMode.Reload)
@@ -381,14 +390,14 @@ namespace Python.Runtime
 
             ClearClrModules();
             RemoveClrRootModule();
-
+            trace("shutdown checkpoint 1");
             MoveClrInstancesOnwershipToPython();
             ClassManager.DisposePythonWrappersForClrTypes();
             TypeManager.RemoveTypes();
 
             MetaType.Release();
             PyCLRMetaType = IntPtr.Zero;
-
+            trace("shutdown checkpoint 2");
             Exceptions.Shutdown();
             Finalizer.Shutdown();
 
@@ -415,6 +424,7 @@ namespace Python.Runtime
                 // if the current state is NULL.
                 if (_PyThreadState_UncheckedGet() != IntPtr.Zero)
                 {
+                    trace("PyEval_SaveThread");
                     PyEval_SaveThread();
                 }
             }
@@ -423,6 +433,7 @@ namespace Python.Runtime
                 ResetPyMembers();
                 Py_Finalize();
             }
+            trace("runtime shutdown done");
         }
 
         internal static void Shutdown()

@@ -45,24 +45,38 @@ namespace Python.Runtime
             }
         }
 
+        static void trace(string msg)
+        {
+            var timestamp = DateTime.UtcNow.ToString("HH:mm:ss.ffff");
+            System.Console.WriteLine($"[Pythonnet] {timestamp}  {msg}");
+            System.Console.Out.Flush();
+        }
+
         internal static void Stash()
         {
+            trace("stash start");
             var metaStorage = new RuntimeDataStorage();
+            trace("saving meta");
             MetaType.SaveRuntimeData(metaStorage);
 
             var importStorage = new RuntimeDataStorage();
+            trace("saving import storage");
             ImportHook.SaveRuntimeData(importStorage);
 
             var typeStorage = new RuntimeDataStorage();
+            trace("saving type data");
             TypeManager.SaveRuntimeData(typeStorage);
 
             var clsStorage = new RuntimeDataStorage();
+            trace("saving cls storage");
             ClassManager.SaveRuntimeData(clsStorage);
 
             var moduleStorage = new RuntimeDataStorage();
+            trace("saving module storage");
             SaveRuntimeDataModules(moduleStorage);
 
             var objStorage = new RuntimeDataStorage();
+            trace("saving object storage");
             SaveRuntimeDataObjects(objStorage);
 
             var runtimeStorage = new RuntimeDataStorage();
@@ -75,7 +89,9 @@ namespace Python.Runtime
 
             IFormatter formatter = CreateFormatter();
             var ms = new MemoryStream();
+            trace("serialization start");
             formatter.Serialize(ms, runtimeStorage);
+            trace("serialization done");
 
             Debug.Assert(ms.Length <= int.MaxValue);
             byte[] data = ms.GetBuffer();
@@ -105,6 +121,7 @@ namespace Python.Runtime
 
         private static void RestoreRuntimeDataImpl()
         {
+            trace("restore start");
             IntPtr capsule = PySys_GetObject("clr_data").DangerousGetAddressUnchecked();
             if (capsule == IntPtr.Zero)
             {
@@ -116,13 +133,21 @@ namespace Python.Runtime
             Marshal.Copy(mem + IntPtr.Size, data, 0, length);
             var ms = new MemoryStream(data);
             var formatter = CreateFormatter();
+            trace("deserialization start");
             var storage = (RuntimeDataStorage)formatter.Deserialize(ms);
+            trace("deserialization done");
 
+            trace("restore objs");
             var objs = RestoreRuntimeDataObjects(storage.GetStorage("objs"));
+            trace("modules");
             RestoreRuntimeDataModules(storage.GetStorage("modules"));
+            trace("classes");
             var clsObjs = ClassManager.RestoreRuntimeData(storage.GetStorage("classes"));
+            trace("restore types");
             TypeManager.RestoreRuntimeData(storage.GetStorage("types"));
+            trace("restore import");
             ImportHook.RestoreRuntimeData(storage.GetStorage("import"));
+            trace("restore meta");
             PyCLRMetaType = MetaType.RestoreRuntimeData(storage.GetStorage("meta"));
 
             foreach (var item in objs)

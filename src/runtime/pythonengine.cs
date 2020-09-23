@@ -328,6 +328,13 @@ namespace Python.Runtime
             return Python.Runtime.ImportHook.GetCLRModule();
         }
 
+        static void trace(string msg)
+        {
+            var timestamp = DateTime.UtcNow.ToString("HH:mm:ss.ffff");
+            System.Console.WriteLine($"[Pythonnet] {timestamp}  {msg}");
+            System.Console.Out.Flush();
+        }
+
         /// <summary>
         /// Shutdown Method
         /// </summary>
@@ -354,6 +361,7 @@ namespace Python.Runtime
             PyObjectConversions.Reset();
 
             initialized = false;
+            trace("engine shutdown done");
         }
 
         /// <summary>
