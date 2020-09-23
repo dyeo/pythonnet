@@ -89,22 +89,37 @@ namespace Python.Runtime
 
             IFormatter formatter = CreateFormatter();
             var ms = new MemoryStream();
-            trace("serialization start");
-            formatter.Serialize(ms, runtimeStorage);
-            trace("serialization done");
+            IntPtr capsule = IntPtr.Zero;
+            try
+            {
+                trace("serialization start");
+                formatter.Serialize(ms, runtimeStorage);
+                trace("serialization done");
 
-            Debug.Assert(ms.Length <= int.MaxValue);
-            byte[] data = ms.GetBuffer();
-            // TODO: use buffer api instead
-            IntPtr mem = PyMem_Malloc(ms.Length + IntPtr.Size);
-            Marshal.WriteIntPtr(mem, (IntPtr)ms.Length);
-            Marshal.Copy(data, 0, mem + IntPtr.Size, (int)ms.Length);
+                Debug.Assert(ms.Length <= int.MaxValue);
+                byte[] data = ms.GetBuffer();
+                // TODO: use buffer api instead
+                IntPtr mem = PyMem_Malloc(ms.Length + IntPtr.Size);
+                Marshal.WriteIntPtr(mem, (IntPtr)ms.Length);
+                Marshal.Copy(data, 0, mem + IntPtr.Size, (int)ms.Length);
 
-            ClearCLRData();
-            IntPtr capsule = PyCapsule_New(mem, null, IntPtr.Zero);
-            PySys_SetObject("clr_data", capsule);
-            // Let the dictionary own the reference
-            XDecref(capsule);
+                ClearCLRData();
+                capsule = PyCapsule_New(mem, null, IntPtr.Zero);
+                PySys_SetObject("clr_data", capsule);
+                
+            }
+            catch(Exception e)
+            {
+                trace($"Serialization failed! No runtime data will be saved. \n {e.Message} :: {e.StackTrace}");
+            }
+            finally
+            {
+                if (capsule != IntPtr.Zero)
+                {
+                    // Let the dictionary own the reference
+                    XDecref(capsule);
+                }
+            }
         }
 
         internal static void RestoreRuntimeData()
