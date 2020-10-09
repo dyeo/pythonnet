@@ -5,7 +5,7 @@ project adheres to [Semantic Versioning][].
 
 This document follows the conventions laid out in [Keep a CHANGELOG][].
 
-## [2.5.1][] - 2020-06-18
+## [Unreleased][]
 
 ### Added
 
