@@ -2164,7 +2164,7 @@ namespace Python.Runtime
         internal static void SetNoSiteFlag()
         {
             var loader = LibraryLoader.Get(NativeCodePageHelper.OperatingSystem);
-            IntPtr dllLocal;
+            IntPtr dllLocal = IntPtr.Zero;
             if (_PythonDll != "__Internal")
             {
                 dllLocal = loader.Load(_PythonDll);
