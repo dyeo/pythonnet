@@ -246,6 +246,13 @@ namespace Python.Runtime
             Runtime.XDecref(dict);
         }
 
+        public override string ToString()
+        {
+            string tp = tpHandle == IntPtr.Zero ? "null type" : new PyObject(this.tpHandle).ToString();
+            string ob = pyHandle == IntPtr.Zero ? "null ob" : new PyObject(this.pyHandle).ToString();
+            return $"{this.GetType()}::{tp}::{ob}";
+        }
+
         protected static IntPtr GetObjectDict(IntPtr ob)
         {
             IntPtr type = Runtime.PyObject_TYPE(ob);

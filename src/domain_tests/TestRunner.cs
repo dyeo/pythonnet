@@ -79,6 +79,11 @@ namespace CaseRunner
             {{
                 throw new ArgumentException(message:pe.Message+""    ""+pe.StackTrace);
             }}
+            catch (Exception e)
+            {{
+                Console.WriteLine(e.StackTrace);
+                throw;
+            }}
             return 0;
         }}
     }}

@@ -22,7 +22,7 @@ namespace Python.Runtime
     [Serializable]
     internal class ConstructorBinding : ExtensionType
     {
-        private Type type; // The managed Type being wrapped in a ClassObject
+        private MaybeSerialize<Type> type; // The managed Type being wrapped in a ClassObject
         private IntPtr pyTypeHndl; // The python type tells GetInstHandle which Type to create.
         private ConstructorBinder ctorBinder;
 
@@ -100,7 +100,7 @@ namespace Python.Runtime
             }
             //MethodBase[] methBaseArray = self.ctorBinder.GetMethods();
             //MethodBase ci = MatchSignature(methBaseArray, types);
-            ConstructorInfo ci = self.type.GetConstructor(types);
+            ConstructorInfo ci = self.type.Value.GetConstructor(types);
             if (ci == null)
             {
                 return Exceptions.RaiseTypeError("No match found for constructor signature");
@@ -122,7 +122,7 @@ namespace Python.Runtime
                 return self.repr;
             }
             MethodBase[] methods = self.ctorBinder.GetMethods();
-            string name = self.type.FullName;
+            string name = self.type.Value.FullName;
             var doc = "";
             foreach (MethodBase t in methods)
             {

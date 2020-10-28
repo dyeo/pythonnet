@@ -53,11 +53,11 @@ namespace Python.Runtime
             var importStorage = new RuntimeDataStorage();
             ImportHook.SaveRuntimeData(importStorage);
 
-            var typeStorage = new RuntimeDataStorage();
-            TypeManager.SaveRuntimeData(typeStorage);
+            // var typeStorage = new RuntimeDataStorage();
+            // TypeManager.SaveRuntimeData(typeStorage);
 
-            var clsStorage = new RuntimeDataStorage();
-            ClassManager.SaveRuntimeData(clsStorage);
+            // var clsStorage = new RuntimeDataStorage();
+            // ClassManager.SaveRuntimeData(clsStorage);
 
             var moduleStorage = new RuntimeDataStorage();
             SaveRuntimeDataModules(moduleStorage);
@@ -68,8 +68,8 @@ namespace Python.Runtime
             var runtimeStorage = new RuntimeDataStorage();
             runtimeStorage.AddValue("meta", metaStorage);
             runtimeStorage.AddValue("import", importStorage);
-            runtimeStorage.AddValue("types", typeStorage);
-            runtimeStorage.AddValue("classes", clsStorage);
+            // runtimeStorage.AddValue("types", typeStorage);
+            // runtimeStorage.AddValue("classes", clsStorage);
             runtimeStorage.AddValue("modules", moduleStorage);
             runtimeStorage.AddValue("objs", objStorage);
 
@@ -120,8 +120,8 @@ namespace Python.Runtime
 
             var objs = RestoreRuntimeDataObjects(storage.GetStorage("objs"));
             RestoreRuntimeDataModules(storage.GetStorage("modules"));
-            var clsObjs = ClassManager.RestoreRuntimeData(storage.GetStorage("classes"));
-            TypeManager.RestoreRuntimeData(storage.GetStorage("types"));
+            // var clsObjs = ClassManager.RestoreRuntimeData(storage.GetStorage("classes"));
+            // TypeManager.RestoreRuntimeData(storage.GetStorage("types"));
             ImportHook.RestoreRuntimeData(storage.GetStorage("import"));
             PyCLRMetaType = MetaType.RestoreRuntimeData(storage.GetStorage("meta"));
 
@@ -130,10 +130,10 @@ namespace Python.Runtime
                 item.Value.ExecutePostActions();
                 XDecref(item.Key.pyHandle);
             }
-            foreach (var item in clsObjs)
-            {
-                item.Value.ExecutePostActions();
-            }
+            // foreach (var item in clsObjs)
+            // {
+            //     item.Value.ExecutePostActions();
+            // }
         }
 
         public static bool HasStashData()

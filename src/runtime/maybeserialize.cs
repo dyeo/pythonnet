@@ -1,3 +1,5 @@
+#define NO_SERIALIZATION
+// #define SINGLE_STREAM
 using System;
 using System.Reflection;
 using System.Runtime.Serialization;
@@ -20,6 +22,11 @@ namespace Python.Runtime
     [Serializable]
     internal struct MaybeSerialize<T> : ISerializable where T : class
     {
+
+        public static implicit operator T (MaybeSerialize<T> self) => self.Value;
+
+        public static implicit operator MaybeSerialize<T> (T ob) => new MaybeSerialize<T>(ob);
+
         /// <summary>
         /// The item being wrapped.
         ///
@@ -61,6 +68,8 @@ namespace Python.Runtime
             {
                 if (m_item == null)
                 {
+                    // extra debug in case it gets caught by a catch {...}
+                    Console.WriteLine("MaybeSerialize throwing on null");
                     throw new SerializationException($"The .NET object underlying {m_name} no longer exists");
                 }
                 return m_item;
@@ -70,7 +79,7 @@ namespace Python.Runtime
         /// <summary>
         /// Get a printable name.
         /// </summary>
-        public string ToString()
+        public override string ToString()
         {
             if (m_item == null)
             {
@@ -87,6 +96,11 @@ namespace Python.Runtime
         /// </summary>
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
+#if NO_SERIALIZATION
+            // store the name, plus the string representation of the item
+            // so that when it's deserialized into a Dictionary<>, it's unique
+            info.AddValue("n", m_name+ToString());
+#elif SINGLE_STREAM
             if (m_item == null)
             {
                 // Save the name; this failed to reload in a previous
@@ -107,6 +121,24 @@ namespace Python.Runtime
                 // Also save the name in case the item doesn't deserialize
                 info.AddValue("n", m_item.ToString());
             }
+#else
+            if (m_item == null)
+            {
+                info.AddValue("n", m_name);
+            }
+            else
+            {
+                // Serialize in a silly way. TODO optimize.
+                var formatter = new BinaryFormatter();
+                using (var ms = new MemoryStream())
+                {
+                    formatter.Serialize(ms, m_item);
+                    info.AddValue("i", ms.ToArray());
+                }
+                // Also save the name in case the info doesn't deserialize
+                info.AddValue("n", m_item.ToString());
+            }
+#endif
         }
 
         /// <summary>
@@ -114,6 +146,10 @@ namespace Python.Runtime
         /// </summary>
         private MaybeSerialize(SerializationInfo info, StreamingContext context)
         {
+#if NO_SERIALIZATION
+            m_item = null;
+            m_name = info.GetString("n");
+#elif SINGLE_STREAM
             try
             {
                 // Try to deserialize the item. It might fail, or it might
@@ -127,6 +163,36 @@ namespace Python.Runtime
                 m_item = null;
                 m_name = info.GetString("n");
             }
+            //------------------------------------------
+#else
+            try
+            {
+                // Try to deserialize the item. It might fail, or it might
+                // have already failed so there just isn't an "i" to find.
+                m_item = (T)info.GetValue("i", typeof(T));
+                m_name = null;
+                var serialized = (byte[])info.GetValue("i", typeof(byte[]));
+                var formatter = new BinaryFormatter();
+                using (var ms = new MemoryStream(serialized))
+                {
+                    m_item = (T)formatter.Deserialize(ms);
+                }
+            }
+            // catch (SerializationException _)
+            catch (Exception e)
+            {
+                // Getting the item failed, so get the name.
+                m_item = null;
+                m_name = info.GetString("n");
+                Console.WriteLine($"oopsie woopsie:{m_name} @ {e.Message}:: {e.StackTrace}");
+                // Console.WriteLine($"failed to deserializing {typeof(T)}::{m_name}");
+            }
+
+            m_name = (m_item != null) ? null : info.GetString("n");
+
+            // Console.WriteLine(System.Environment.StackTrace);
+            // Console.WriteLine($"Done {typeof(T)}::{info.GetString("n")}");
+#endif
         }
     }
 }

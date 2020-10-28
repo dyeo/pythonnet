@@ -13,17 +13,18 @@ namespace Python.Runtime
     internal class ClassObject : ClassBase
     {
         internal ConstructorBinder binder;
-        internal ConstructorInfo[] ctors;
+        internal MaybeSerialize<ConstructorInfo>[] ctors;
 
         internal ClassObject(Type tp) : base(tp)
         {
-            ctors = type.GetConstructors();
+            var _ctors = type.GetConstructors();
+            ctors = new MaybeSerialize<ConstructorInfo>[_ctors.Length];
+            for (int i = 0; i < _ctors.Length; i++)
+            {
+                ctors[i] = new MaybeSerialize<ConstructorInfo>(_ctors[i]);
+            }
             binder = new ConstructorBinder(type);
 
-            foreach (ConstructorInfo t in ctors)
-            {
-                binder.AddMethod(t);
-            }
         }
 
 

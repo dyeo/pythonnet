@@ -14,7 +14,7 @@ namespace Python.Runtime
     [Serializable]
     internal class ConstructorBinder : MethodBinder
     {
-        private Type _containingType;
+        private MaybeSerialize<Type>  _containingType;
 
         internal ConstructorBinder(Type containingType)
         {
@@ -53,8 +53,8 @@ namespace Python.Runtime
         {
             object result;
 
-            if (_containingType.IsValueType && !_containingType.IsPrimitive &&
-                !_containingType.IsEnum && _containingType != typeof(decimal) &&
+            if (_containingType.Value.IsValueType && !_containingType.Value.IsPrimitive &&
+                !_containingType.Value.IsEnum && _containingType != typeof(decimal) &&
                 Runtime.PyTuple_Size(args) == 0)
             {
                 // If you are trying to construct an instance of a struct by

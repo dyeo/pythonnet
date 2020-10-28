@@ -82,30 +82,31 @@ namespace Python.Runtime
 
         internal static void SaveRuntimeData(RuntimeDataStorage storage)
         {
-            var contexts = storage.AddValue("contexts",
-                new Dictionary<IntPtr, InterDomainContext>());
-            storage.AddValue("cache", cache);
-            foreach (var cls in cache.Values)
-            {
-                // This incref is for cache to hold the cls,
-                // thus no need for decreasing it at RestoreRuntimeData.
-                Runtime.XIncref(cls.pyHandle);
-                var context = contexts[cls.pyHandle] = new InterDomainContext();
-                cls.Save(context);
-            }
+            // var contexts = storage.AddValue("contexts",
+            //     new Dictionary<IntPtr, InterDomainContext>());
+            // storage.AddValue("cache", cache);
+            // foreach (var cls in cache.Values)
+            // {
+            //     // This incref is for cache to hold the cls,
+            //     // thus no need for decreasing it at RestoreRuntimeData.
+            //     Runtime.XIncref(cls.pyHandle);
+            //     var context = contexts[cls.pyHandle] = new InterDomainContext();
+            //     cls.Save(context);
+            // }
         }
 
         internal static Dictionary<ManagedType, InterDomainContext> RestoreRuntimeData(RuntimeDataStorage storage)
         {
-            cache = storage.GetValue<Dictionary<Type, ClassBase>>("cache");
-            var contexts = storage.GetValue <Dictionary<IntPtr, InterDomainContext>>("contexts");
+            // cache = storage.GetValue<Dictionary<MaybeSerialize<Type>, ClassBase>>("cache");
+            // // cache = storage.GetValue<Dictionary<Type, ClassBase>>("cache");
+            // var contexts = storage.GetValue <Dictionary<IntPtr, InterDomainContext>>("contexts");
             var loadedObjs = new Dictionary<ManagedType, InterDomainContext>();
-            foreach (var cls in cache.Values)
-            {
-                var context = contexts[cls.pyHandle];
-                cls.Load(context);
-                loadedObjs.Add(cls, context);
-            }
+            // foreach (var cls in cache.Values)
+            // {
+            //     var context = contexts[cls.pyHandle];
+            //     cls.Load(context);
+            //     loadedObjs.Add(cls, context);
+            // }
             return loadedObjs;
         }
 

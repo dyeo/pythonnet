@@ -64,27 +64,37 @@ namespace Python.Runtime
 
         internal static void SaveRuntimeData(RuntimeDataStorage storage)
         {
-            foreach (var tpHandle in cache.Values)
-            {
-                Runtime.XIncref(tpHandle);
-            }
-            storage.AddValue("cache", cache);
-            storage.AddValue("slots", _slotsImpls);
+            // we can no-op here, RemoveTypes is called in Runtime.Shutdown()
+            // foreach (var tpHandle in cache.Values)
+            // {
+            //     Runtime.XIncref(tpHandle);
+            // }
+            // storage.AddValue("cache", cache);
+            // storage.AddValue("slots", _slotsImpls);
+            
         }
 
         internal static void RestoreRuntimeData(RuntimeDataStorage storage)
         {
             Debug.Assert(cache == null || cache.Count == 0);
-            storage.GetValue("slots", out _slotsImpls);
-            storage.GetValue("cache", out cache);
-            foreach (var entry in cache)
-            {
-                Type type = entry.Key;
-                IntPtr handle = entry.Value;
-                SlotsHolder holder = CreateSolotsHolder(handle);
-                InitializeSlots(handle, _slotsImpls[type], holder);
-                // FIXME: mp_length_slot.CanAssgin(clrType)
-            }
+            // storage.GetValue("slots", out _slotsImpls);
+            // storage.GetValue("cache", out cache);
+            // foreach (var entry in cache)
+            // {
+            //     Type type = null;
+            //     try
+            //     {
+            //         type = entry.Key;
+            //     }
+            //     catch
+            //     {
+            //         continue;
+            //     }
+            //     IntPtr handle = entry.Value;
+            //     SlotsHolder holder = CreateSolotsHolder(handle);
+            //     InitializeSlots(handle, _slotsImpls[type], holder);
+            //     // FIXME: mp_length_slot.CanAssgin(clrType)
+            // }
         }
 
         /// <summary>
