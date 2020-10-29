@@ -76,6 +76,8 @@ namespace Python.Runtime
             }
         }
 
+        public bool Valid => m_item == null;
+
         /// <summary>
         /// Get a printable name.
         /// </summary>

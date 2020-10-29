@@ -54,7 +54,7 @@ namespace Python.Runtime
             object result;
 
             if (_containingType.Value.IsValueType && !_containingType.Value.IsPrimitive &&
-                !_containingType.Value.IsEnum && _containingType != typeof(decimal) &&
+                !_containingType.Value.IsEnum && _containingType.Value != typeof(decimal) &&
                 Runtime.PyTuple_Size(args) == 0)
             {
                 // If you are trying to construct an instance of a struct by
@@ -64,7 +64,7 @@ namespace Python.Runtime
                 // Activator.CreateInstance().
                 try
                 {
-                    result = Activator.CreateInstance(_containingType);
+                    result = Activator.CreateInstance(_containingType.Value);
                 }
                 catch (Exception e)
                 {

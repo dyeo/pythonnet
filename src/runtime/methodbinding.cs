@@ -166,7 +166,7 @@ namespace Python.Runtime
                         var baseType = GetManagedObject(self.targetType) as ClassBase;
                         if (baseType != null)
                         {
-                            string baseMethodName = "_" + baseType.type.Name + "__" + self.m.name;
+                            string baseMethodName = "_" + baseType.type.Value.Name + "__" + self.m.name;
                             IntPtr baseMethod = Runtime.PyObject_GetAttrString(target, baseMethodName);
                             if (baseMethod != IntPtr.Zero)
                             {

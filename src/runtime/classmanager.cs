@@ -18,7 +18,7 @@ namespace Python.Runtime
     /// </summary>
     internal class ClassManager
     {
-        private static Dictionary<Type, ClassBase> cache;
+        private static Dictionary<MaybeSerialize<Type>, ClassBase> cache;
         private static readonly Type dtype;
 
         private ClassManager()
@@ -36,7 +36,7 @@ namespace Python.Runtime
 
         public static void Reset()
         {
-            cache = new Dictionary<Type, ClassBase>(128);
+            cache = new Dictionary<MaybeSerialize<Type>, ClassBase>(128);
         }
 
         internal static void DisposePythonWrappersForClrTypes()
@@ -82,31 +82,40 @@ namespace Python.Runtime
 
         internal static void SaveRuntimeData(RuntimeDataStorage storage)
         {
-            // var contexts = storage.AddValue("contexts",
-            //     new Dictionary<IntPtr, InterDomainContext>());
-            // storage.AddValue("cache", cache);
-            // foreach (var cls in cache.Values)
-            // {
-            //     // This incref is for cache to hold the cls,
-            //     // thus no need for decreasing it at RestoreRuntimeData.
-            //     Runtime.XIncref(cls.pyHandle);
-            //     var context = contexts[cls.pyHandle] = new InterDomainContext();
-            //     cls.Save(context);
-            // }
+            var contexts = storage.AddValue("contexts",
+                new Dictionary<IntPtr, InterDomainContext>());
+            storage.AddValue("cache", cache);
+            foreach (var cls in cache)
+            {
+                if (!cls.Key.Valid)
+                {
+                    // Don't serialize an invalid class
+                    continue;
+                }
+                // This incref is for cache to hold the cls,
+                // thus no need for decreasing it at RestoreRuntimeData.
+                Runtime.XIncref(cls.Value.pyHandle);
+                var context = contexts[cls.Value.pyHandle] = new InterDomainContext();
+                cls.Value.Save(context);
+            }
         }
 
         internal static Dictionary<ManagedType, InterDomainContext> RestoreRuntimeData(RuntimeDataStorage storage)
         {
-            // cache = storage.GetValue<Dictionary<MaybeSerialize<Type>, ClassBase>>("cache");
-            // // cache = storage.GetValue<Dictionary<Type, ClassBase>>("cache");
-            // var contexts = storage.GetValue <Dictionary<IntPtr, InterDomainContext>>("contexts");
+            cache = storage.GetValue<Dictionary<MaybeSerialize<Type>, ClassBase>>("cache");
+            // cache = storage.GetValue<Dictionary<Type, ClassBase>>("cache");
+            var contexts = storage.GetValue <Dictionary<IntPtr, InterDomainContext>>("contexts");
             var loadedObjs = new Dictionary<ManagedType, InterDomainContext>();
-            // foreach (var cls in cache.Values)
-            // {
-            //     var context = contexts[cls.pyHandle];
-            //     cls.Load(context);
-            //     loadedObjs.Add(cls, context);
-            // }
+            foreach (var cls in cache.Values)
+            {
+                if (!contexts.ContainsKey(cls.pyHandle))
+                {
+                    continue;
+                }
+                var context = contexts[cls.pyHandle];
+                cls.Load(context);
+                loadedObjs.Add(cls, context);
+            }
             return loadedObjs;
         }
 

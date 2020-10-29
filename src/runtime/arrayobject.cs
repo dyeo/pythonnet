@@ -46,7 +46,7 @@ namespace Python.Runtime
             var obj = (CLRObject)GetManagedObject(ob);
             var arrObj = (ArrayObject)GetManagedObjectType(ob);
             var items = obj.inst as Array;
-            Type itemType = arrObj.type.GetElementType();
+            Type itemType = arrObj.type.Value.GetElementType();
             int rank = items.Rank;
             int index;
             object value;

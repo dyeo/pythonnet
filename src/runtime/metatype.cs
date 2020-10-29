@@ -338,7 +338,7 @@ namespace Python.Runtime
                     return Runtime.PyFalse;
                 }
 
-                return Converter.ToPython(cb.type.IsAssignableFrom(otherCb.type));
+                return Converter.ToPython(cb.type.Value.IsAssignableFrom(otherCb.type));
             }
         }
 

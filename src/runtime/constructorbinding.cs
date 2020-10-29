@@ -105,7 +105,7 @@ namespace Python.Runtime
             {
                 return Exceptions.RaiseTypeError("No match found for constructor signature");
             }
-            var boundCtor = new BoundContructor(self.type, self.pyTypeHndl, self.ctorBinder, ci);
+            var boundCtor = new BoundContructor(self.type.Value, self.pyTypeHndl, self.ctorBinder, ci);
 
             return boundCtor.pyHandle;
         }

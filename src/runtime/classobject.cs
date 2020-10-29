@@ -13,18 +13,13 @@ namespace Python.Runtime
     internal class ClassObject : ClassBase
     {
         internal ConstructorBinder binder;
-        internal MaybeSerialize<ConstructorInfo>[] ctors;
+        internal int ctors_len = 0;
 
         internal ClassObject(Type tp) : base(tp)
         {
-            var _ctors = type.GetConstructors();
-            ctors = new MaybeSerialize<ConstructorInfo>[_ctors.Length];
-            for (int i = 0; i < _ctors.Length; i++)
-            {
-                ctors[i] = new MaybeSerialize<ConstructorInfo>(_ctors[i]);
-            }
+            ctors_len = type.Value.GetConstructors().Length;
+            //ctors_len = type.GetConstructors().Length;
             binder = new ConstructorBinder(type);
-
         }
 
 
@@ -124,7 +119,7 @@ namespace Python.Runtime
                     return Exceptions.RaiseTypeError("type expected");
                 }
                 var c = GetManagedObject(idx) as ClassBase;
-                Type t = c != null ? c.type : Converter.GetTypeByAlias(idx);
+                Type t = c != null ? c.type.Value : Converter.GetTypeByAlias(idx);
                 if (t == null)
                 {
                     return Exceptions.RaiseTypeError("type expected");
@@ -144,7 +139,7 @@ namespace Python.Runtime
                 return Exceptions.RaiseTypeError("type(s) expected");
             }
 
-            Type gtype = AssemblyManager.LookupType($"{type.FullName}`{types.Length}");
+            Type gtype = AssemblyManager.LookupType($"{type.Value.FullName}`{types.Length}");
             if (gtype != null)
             {
                 var g = ClassManager.GetClass(gtype) as GenericType;

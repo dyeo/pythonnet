@@ -19,7 +19,7 @@ namespace Python.Runtime
     internal class ClassBase : ManagedType
     {
         internal Indexer indexer;
-        internal Type type;
+        internal MaybeSerialize<Type> type;
 
         internal ClassBase(Type tp)
         {
@@ -29,7 +29,7 @@ namespace Python.Runtime
 
         internal virtual bool CanSubclass()
         {
-            return !type.IsEnum;
+            return !type.Value.IsEnum;
         }
 
 

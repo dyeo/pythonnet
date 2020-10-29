@@ -20,9 +20,10 @@ namespace Python.Runtime
         internal static IntPtr subtype_clear;
 
         private const BindingFlags tbFlags = BindingFlags.Public | BindingFlags.Static;
-        private static Dictionary<Type, IntPtr> cache = new Dictionary<Type, IntPtr>();
+        private static Dictionary<MaybeSerialize<Type>, IntPtr> cache = new Dictionary<MaybeSerialize<Type>, IntPtr>();
+
         private static readonly Dictionary<IntPtr, SlotsHolder> _slotsHolders = new Dictionary<IntPtr, SlotsHolder>();
-        private static Dictionary<Type, Type> _slotsImpls = new Dictionary<Type, Type>();
+        private static Dictionary<MaybeSerialize<Type>, Type> _slotsImpls = new Dictionary<MaybeSerialize<Type>, Type>();
 
         // Slots which must be set
         private static readonly string[] _requiredSlots = new string[]
@@ -64,37 +65,36 @@ namespace Python.Runtime
 
         internal static void SaveRuntimeData(RuntimeDataStorage storage)
         {
-            // we can no-op here, RemoveTypes is called in Runtime.Shutdown()
-            // foreach (var tpHandle in cache.Values)
-            // {
-            //     Runtime.XIncref(tpHandle);
-            // }
-            // storage.AddValue("cache", cache);
-            // storage.AddValue("slots", _slotsImpls);
+            foreach (var tpHandle in cache.Values)
+            {
+                Runtime.XIncref(tpHandle);
+            }
+            storage.AddValue("cache", cache);
+            storage.AddValue("slots", _slotsImpls);
             
         }
 
         internal static void RestoreRuntimeData(RuntimeDataStorage storage)
         {
             Debug.Assert(cache == null || cache.Count == 0);
-            // storage.GetValue("slots", out _slotsImpls);
-            // storage.GetValue("cache", out cache);
-            // foreach (var entry in cache)
-            // {
-            //     Type type = null;
-            //     try
-            //     {
-            //         type = entry.Key;
-            //     }
-            //     catch
-            //     {
-            //         continue;
-            //     }
-            //     IntPtr handle = entry.Value;
-            //     SlotsHolder holder = CreateSolotsHolder(handle);
-            //     InitializeSlots(handle, _slotsImpls[type], holder);
-            //     // FIXME: mp_length_slot.CanAssgin(clrType)
-            // }
+            storage.GetValue("slots", out _slotsImpls);
+            storage.GetValue("cache", out cache);
+            foreach (var entry in cache)
+            {
+                Type type = null;
+                try
+                {
+                    type = entry.Key.Value;
+                }
+                catch
+                {
+                    continue;
+                }
+                IntPtr handle = entry.Value;
+                SlotsHolder holder = CreateSolotsHolder(handle);
+                InitializeSlots(handle, _slotsImpls[type], holder);
+                // FIXME: mp_length_slot.CanAssgin(clrType)
+            }
         }
 
         /// <summary>
