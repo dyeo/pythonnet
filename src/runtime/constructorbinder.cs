@@ -14,7 +14,7 @@ namespace Python.Runtime
     [Serializable]
     internal class ConstructorBinder : MethodBinder
     {
-        private MaybeSerialize<Type>  _containingType;
+        private MaybeType _containingType;
 
         internal ConstructorBinder(Type containingType)
         {

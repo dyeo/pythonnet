@@ -20,10 +20,10 @@ namespace Python.Runtime
         internal static IntPtr subtype_clear;
 
         private const BindingFlags tbFlags = BindingFlags.Public | BindingFlags.Static;
-        private static Dictionary<MaybeSerialize<Type>, IntPtr> cache = new Dictionary<MaybeSerialize<Type>, IntPtr>();
+        private static Dictionary<MaybeType, IntPtr> cache = new Dictionary<MaybeType, IntPtr>();
 
         private static readonly Dictionary<IntPtr, SlotsHolder> _slotsHolders = new Dictionary<IntPtr, SlotsHolder>();
-        private static Dictionary<MaybeSerialize<Type>, Type> _slotsImpls = new Dictionary<MaybeSerialize<Type>, Type>();
+        private static Dictionary<MaybeType, Type> _slotsImpls = new Dictionary<MaybeType, Type>();
 
         // Slots which must be set
         private static readonly string[] _requiredSlots = new string[]
@@ -78,8 +78,9 @@ namespace Python.Runtime
         {
             Debug.Assert(cache == null || cache.Count == 0);
             storage.GetValue("slots", out _slotsImpls);
-            storage.GetValue("cache", out cache);
-            foreach (var entry in cache)
+            var _cache = new Dictionary<MaybeType, IntPtr>();
+            storage.GetValue("cache", out _cache);
+            foreach (var entry in _cache)
             {
                 Type type = null;
                 try
@@ -91,6 +92,7 @@ namespace Python.Runtime
                     continue;
                 }
                 IntPtr handle = entry.Value;
+                cache[type] = handle;
                 SlotsHolder holder = CreateSolotsHolder(handle);
                 InitializeSlots(handle, _slotsImpls[type], holder);
                 // FIXME: mp_length_slot.CanAssgin(clrType)

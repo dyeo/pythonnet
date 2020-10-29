@@ -22,7 +22,7 @@ namespace Python.Runtime
     [Serializable]
     internal class ConstructorBinding : ExtensionType
     {
-        private MaybeSerialize<Type> type; // The managed Type being wrapped in a ClassObject
+        private MaybeType type; // The managed Type being wrapped in a ClassObject
         private IntPtr pyTypeHndl; // The python type tells GetInstHandle which Type to create.
         private ConstructorBinder ctorBinder;
 

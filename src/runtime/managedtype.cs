@@ -248,13 +248,14 @@ namespace Python.Runtime
 
         public override string ToString()
         {
-            if (tpHandle == null || pyHandle == null)
+            if (tpHandle == null || pyHandle == null || tpHandle == IntPtr.Zero || pyHandle == IntPtr.Zero)
             {
                 return  $"{this.GetType()}::null::null";
             }
-            string tp = tpHandle == IntPtr.Zero ? "null type" : new PyObject(this.tpHandle).ToString();
-            string ob = pyHandle == IntPtr.Zero ? "null ob" : new PyObject(this.pyHandle).ToString();
-            return $"{this.GetType()}::{tp}::{ob}";
+            //using (var _tp = new PyObject(this.tpHandle))
+            //using (var _py = new PyObject(this.pyHandle))
+            //return $"{this.GetType()}::tp:{_tp.ToString()}::ob:{_py.ToString()}";
+            return $"{this.GetType()}::tp:{tpHandle}::ob:{pyHandle}";
         }
 
         protected static IntPtr GetObjectDict(IntPtr ob)

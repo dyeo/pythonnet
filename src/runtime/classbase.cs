@@ -19,7 +19,7 @@ namespace Python.Runtime
     internal class ClassBase : ManagedType
     {
         internal Indexer indexer;
-        internal MaybeSerialize<Type> type;
+        internal MaybeType type;
 
         internal ClassBase(Type tp)
         {

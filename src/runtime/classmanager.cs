@@ -18,7 +18,7 @@ namespace Python.Runtime
     /// </summary>
     internal class ClassManager
     {
-        private static Dictionary<MaybeSerialize<Type>, ClassBase> cache;
+        private static Dictionary<MaybeType, ClassBase> cache;
         private static readonly Type dtype;
 
         private ClassManager()
@@ -36,7 +36,7 @@ namespace Python.Runtime
 
         public static void Reset()
         {
-            cache = new Dictionary<MaybeSerialize<Type>, ClassBase>(128);
+            cache = new Dictionary<MaybeType, ClassBase>(128);
         }
 
         internal static void DisposePythonWrappersForClrTypes()
@@ -102,19 +102,21 @@ namespace Python.Runtime
 
         internal static Dictionary<ManagedType, InterDomainContext> RestoreRuntimeData(RuntimeDataStorage storage)
         {
-            cache = storage.GetValue<Dictionary<MaybeSerialize<Type>, ClassBase>>("cache");
+            var _cache = storage.GetValue<Dictionary<MaybeType, ClassBase>>("cache");
             // cache = storage.GetValue<Dictionary<Type, ClassBase>>("cache");
             var contexts = storage.GetValue <Dictionary<IntPtr, InterDomainContext>>("contexts");
             var loadedObjs = new Dictionary<ManagedType, InterDomainContext>();
-            foreach (var cls in cache.Values)
+            foreach (var pair in _cache)
             {
-                if (!contexts.ContainsKey(cls.pyHandle))
+                Console.WriteLine($"{pair.Key}, {pair.Value}");
+                if (!pair.Key.Valid)
                 {
                     continue;
                 }
-                var context = contexts[cls.pyHandle];
-                cls.Load(context);
-                loadedObjs.Add(cls, context);
+                cache.Add(pair.Key, pair.Value);
+                var context = contexts[pair.Value.pyHandle];
+                pair.Value.Load(context);
+                loadedObjs.Add(pair.Value, context);
             }
             return loadedObjs;
         }
