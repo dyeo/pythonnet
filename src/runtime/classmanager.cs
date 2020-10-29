@@ -253,7 +253,7 @@ namespace Python.Runtime
             // required that the ClassObject.ctors be changed to internal
             if (co != null)
             {
-                if (co.ctors.Length > 0)
+                if (co.ctors_len > 0)
                 {
                     // Implement Overloads on the class object
                     if (!CLRModule._SuppressOverloads)
