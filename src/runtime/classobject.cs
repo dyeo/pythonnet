@@ -17,9 +17,13 @@ namespace Python.Runtime
 
         internal ClassObject(Type tp) : base(tp)
         {
-            ctors_len = type.Value.GetConstructors().Length;
-            //ctors_len = type.GetConstructors().Length;
+            var _ctors = type.Value.GetConstructors();
+            ctors_len = _ctors.Length;
             binder = new ConstructorBinder(type);
+            foreach (ConstructorInfo t in _ctors)
+            {
+                binder.AddMethod(t);
+            }
         }
 
 
