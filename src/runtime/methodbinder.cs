@@ -16,19 +16,21 @@ namespace Python.Runtime
     [Serializable]
     internal class MethodBinder
     {
-        public ArrayList list;
+        public List<MaybeMethodBase> list;
+        [NonSerialized]
         public MethodBase[] methods;
+        [NonSerialized]
         public bool init = false;
         public bool allow_threads = true;
 
         internal MethodBinder()
         {
-            list = new ArrayList();
+            list = new List<MaybeMethodBase>();
         }
 
         internal MethodBinder(MethodInfo mi)
         {
-            list = new ArrayList { mi };
+            list = new List<MaybeMethodBase> { new MaybeMethodBase(mi) };
         }
 
         public int Count
@@ -164,7 +166,7 @@ namespace Python.Runtime
             {
                 // I'm sure this could be made more efficient.
                 list.Sort(new MethodSorter());
-                methods = (MethodBase[])list.ToArray(typeof(MethodBase));
+                methods = (from method in list where method.Valid select method.Value).ToArray();
                 init = true;
             }
             return methods;
@@ -770,12 +772,12 @@ namespace Python.Runtime
     /// <summary>
     /// Utility class to sort method info by parameter type precedence.
     /// </summary>
-    internal class MethodSorter : IComparer
+    internal class MethodSorter : IComparer<MaybeMethodBase>
     {
-        int IComparer.Compare(object m1, object m2)
+        int IComparer<MaybeMethodBase>.Compare(MaybeMethodBase m1, MaybeMethodBase m2)
         {
-            var me1 = (MethodBase)m1;
-            var me2 = (MethodBase)m2;
+            MethodBase me1 = m1;
+            MethodBase me2 = m2;
             if (me1.DeclaringType != me2.DeclaringType)
             {
                 // m2's type derives from m1's type, favor m2
