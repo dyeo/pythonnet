@@ -95,7 +95,50 @@ def after():
     else:
         raise AssertionError('Failed to throw exception')
                     ",
-            }
+            },
+            new TestCase {
+                Name = "member_rename",
+                DotNetBefore = @"
+                    namespace TestNamespace {
+                        [System.Serializable]
+                        public class Cls { public int Before() { return 5; } }
+                    }",
+                DotNetAfter = @"
+                    namespace TestNamespace {
+                        [System.Serializable]
+                        public class Cls { public int After() { return 10; } }
+                    }",
+                PythonCode = @"
+import clr
+clr.AddReference('DomainTests')
+import TestNamespace
+def before():
+    import sys
+    sys.my_cls = TestNamespace.Cls
+    sys.my_fn = TestNamespace.Cls.Before
+def after():
+    import sys
+
+    # We should have reloaded the class so we can access the new function.
+    assert 10 == sys.my_cls.After()
+
+    try:
+        # We should have reloaded the class so we can't access the old function.
+        sys.my_cls.Before()
+    except AttributeError:
+        print('Caught expected AttributeError')
+    else:
+        raise AssertionError('Failed to throw exception: expected AttributeError accessing class member that no longer exists')
+
+    try:
+        # We should have failed to reload the function which no longer exists.
+        sys.my_fn()
+    except TypeError:
+        print('Caught expected TypeError')
+    else:
+        raise AssertionError('Failed to throw exception: expected TypeError accessing .NET field that no longer exists')
+                    ",
+            },
         };
 
         /// <summary>
