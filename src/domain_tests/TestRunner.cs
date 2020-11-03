@@ -4,52 +4,148 @@ using System;
 using Microsoft.CSharp;
 using System.CodeDom.Compiler;
 using System.IO;
+using System.Linq;
 
 namespace Python.DomainReloadTests
 {
     /// <summary>
+    /// This class provides an executable that can run domain reload tests.
+    /// The setup is a bit complicated:
+    /// 1. pytest runs test_*.py in this directory.
+    /// 2. test_classname runs Python.DomainReloadTests.exe (this class) with an argument
+    /// 3. This class at runtime creates a directory that has both C# and
+    ///    python code, and compiles the C#.
+    /// 4. This class then runs the C# code.
+    ///
+    /// But wait there's more indirection. The C# code that's run -- known as
+    /// the test runner --
     /// This class compiles a DLL that contains the class which code will change
     /// and a runner executable that will run Python code referencing the class.
-    /// It's Main() will:
-    /// * Run the runner and unlod it's domain
-    /// * Modify and re-compile the test class
-    /// * Re-run the runner and unload it twice
+    /// Each test case:
+    /// * Compiles some code, loads it into a domain, runs python that refers to it.
+    /// * Unload the domain.
+    /// * Compile a new piece of code, load it into a domain, run a new piece of python that accesses the code.
+    /// * Unload the domain. Reload the domain, run the same python again.
+    /// This class gets built into an executable which takes one argument:
+    /// which test case to run. That's because pytest assumes we'll run
+    /// everything in one process, but we really want a clean process on each
+    /// test case to test the init/reload/teardown parts of the domain reload
+    /// code.
     /// </summary>
     class TestRunner
     {
-        /// <summary>
-        /// The code of the test class that changes
-        /// </summary>
-        const string ChangingClassTemplate = @"
-using System;
+        const string TestAssemblyName = "DomainTests";
 
-namespace TestNamespace
-{
-    [Serializable]
-    public class {class}
-    {
-    }
-}";
+        class TestCase
+        {
+            /// <summary>
+            /// The key to pass as an argument to choose this test.
+            /// </summary>
+            public string Name;
 
-        /// <summary>
-        /// The Python code that accesses the test class
-        /// </summary>
-        const string PythonCode = @"import clr
-clr.AddReference('TestClass')
-import sys
-from TestNamespace import {class}
+            /// <summary>
+            /// The C# code to run in the first domain.
+            /// </summary>
+            public string DotNetBefore;
+
+            /// <summary>
+            /// The C# code to run in the second domain.
+            /// </summary>
+            public string DotNetAfter;
+
+            /// <summary>
+            /// The Python code to run as a module that imports the C#.
+            /// It should have two functions: before() and after(). Before
+            /// will be called when DotNetBefore is loaded; after will be
+            /// called (twice) when DotNetAfter is loaded.
+            /// To make the test fail, have those functions raise exceptions.
+            ///
+            /// Make sure there's no leading spaces since Python cares.
+            /// </summary>
+            public string PythonCode;
+        }
+
+        static TestCase[] Cases = new TestCase[]
+        {
+            new TestCase {
+                Name = "class_rename",
+                DotNetBefore = @"
+                    namespace TestNamespace {
+                        [System.Serializable]
+                        public class Before { }
+                    }",
+                DotNetAfter = @"
+                    namespace TestNamespace {
+                        [System.Serializable]
+                        public class After { }
+                    }",
+                PythonCode = @"
+import clr
+clr.AddReference('DomainTests')
+from TestNamespace import Before
+def before():
+    import sys
+    sys.my_cls = Before
+def after():
+    import sys
+    try:
+        sys.my_cls.Member()
+    except TypeError:
+        print('Caught expected exception')
+    else:
+        raise AssertionError('Failed to throw exception')
+                    ",
+            },
+            new TestCase {
+                Name = "member_rename",
+                DotNetBefore = @"
+                    namespace TestNamespace {
+                        [System.Serializable]
+                        public class Cls { public int Before() { return 5; } }
+                    }",
+                DotNetAfter = @"
+                    namespace TestNamespace {
+                        [System.Serializable]
+                        public class Cls { public int After() { return 10; } }
+                    }",
+                PythonCode = @"
+import clr
+clr.AddReference('DomainTests')
 import TestNamespace
-foo = None
-def do_work():
-    sys.my_obj = {class}
+def before():
+    import sys
+    sys.my_cls = TestNamespace.Cls
+    sys.my_fn = TestNamespace.Cls.Before
+def after():
+    import sys
 
-def test_work():
-    print({class})
-    print(sys.my_obj)
-";
+    # We should have reloaded the class so we can access the new function.
+    assert 10 == sys.my_cls.After()
+
+    try:
+        # We should have reloaded the class so we can't access the old function.
+        sys.my_cls.Before()
+    except AttributeError:
+        print('Caught expected AttributeError')
+    else:
+        raise AssertionError('Failed to throw exception: expected AttributeError accessing class member that no longer exists')
+
+    try:
+        # We should have failed to reload the function which no longer exists.
+        sys.my_fn()
+    except TypeError:
+        print('Caught expected TypeError')
+    else:
+        raise AssertionError('Failed to throw exception: expected TypeError accessing .NET field that no longer exists')
+                    ",
+            },
+        };
 
         /// <summary>
         /// The runner's code. Runs the python code
+        /// This is a template for string.Format
+        /// Arg 0 is the reload mode: ShutdownMode.Reload or other.
+        /// Arg 1 is the no-arg python function to run, before or after.
         /// </summary>
         const string CaseRunnerTemplate = @"
 using System;
@@ -71,7 +167,7 @@ namespace CaseRunner
                     dynamic sys = Py.Import(""sys"");
                     sys.path.append(new PyString(temp));
                     dynamic test_mod = Py.Import(""domain_test_module.mod"");
-                    test_mod.{1}_work();
+                    test_mod.{1}();
                 }}
                 PythonEngine.Shutdown();
             }}
@@ -93,12 +189,18 @@ namespace CaseRunner
 
         public static int Main(string[] args)
         {
+            TestCase testCase;
             if (args.Length < 1)
             {
-                args = new string[] {"TestClass", "NewTestClass"};
-                // return 123;
+                testCase = Cases[0];
             }
-            Console.WriteLine($"Testing with arguments: {string.Join(", ", args)}");
+            else
+            {
+                string testName = args[0];
+                Console.WriteLine($"Looking for domain reload test case {testName}");
+                testCase = Cases.First(c => c.Name == testName);
+            }
+            Console.WriteLine($"Running domain reload test case: {testCase.Name}");
 
             var tempFolderPython = Path.Combine(Path.GetTempPath(), "Python.Runtime.dll");
             if (File.Exists(tempFolderPython))
@@ -108,27 +210,26 @@ namespace CaseRunner
 
             File.Copy(PythonDllLocation, tempFolderPython);
             
-            CreatePythonModule(args[0]);
+            CreatePythonModule(testCase);
             {
-                var runnerAssembly = CreateCaseRunnerAssembly(verb:"do");
-                CreateTestClassAssembly(className: args[0]);
+                var runnerAssembly = CreateCaseRunnerAssembly(verb:"before");
+                CreateTestClassAssembly(testCase.DotNetBefore);
 
-                var runnerDomain = CreateDomain("case runner");
+                var runnerDomain = CreateDomain("case runner before");
                 RunAndUnload(runnerDomain, runnerAssembly);
             }
 
             {
-                var runnerAssembly = CreateCaseRunnerAssembly(verb:"test");
-                // remove the method
-                CreateTestClassAssembly(className: args[1]);
+                var runnerAssembly = CreateCaseRunnerAssembly(verb:"after");
+                CreateTestClassAssembly(testCase.DotNetAfter);
 
                 // Do it twice for good measure
                 {
-                    var runnerDomain = CreateDomain("case runner 2");
+                    var runnerDomain = CreateDomain("case runner after");
                     RunAndUnload(runnerDomain, runnerAssembly);
                 }
                 {
-                    var runnerDomain = CreateDomain("case runner 3");
+                    var runnerDomain = CreateDomain("case runner after (again)");
                     RunAndUnload(runnerDomain, runnerAssembly);
                 }
             }
@@ -148,15 +249,12 @@ namespace CaseRunner
             GC.Collect();
         }
 
-        static string CreateTestClassAssembly(string className)
+        static string CreateTestClassAssembly(string code)
         {
-            var name = "TestClass.dll";
-            string code = ChangingClassTemplate.Replace("{class}", className);
-
-            return CreateAssembly(name, code, exe: false);
+            return CreateAssembly(TestAssemblyName + ".dll", code, exe: false);
         }
 
-        static string CreateCaseRunnerAssembly(string shutdownMode = "ShutdownMode.Reload", string verb = "do")
+        static string CreateCaseRunnerAssembly(string verb, string shutdownMode = "ShutdownMode.Reload")
         {
             var code = string.Format(CaseRunnerTemplate, shutdownMode, verb);
             var name = "TestCaseRunner.exe";
@@ -184,11 +282,13 @@ namespace CaseRunner
             CompilerResults results = provider.CompileAssemblyFromSource(parameters, code);
             if (results.NativeCompilerReturnValue != 0)
             {
+                var stderr = System.Console.Error;
+                stderr.WriteLine($"Error in {name} compiling:\n{code}");
                 foreach (var error in results.Errors)
                 {
-                    System.Console.WriteLine(error);
+                    stderr.WriteLine(error);
                 }
-                throw new ArgumentException();
+                throw new ArgumentException("Error compiling code");
             }
 
             return assemblyFullPath;
@@ -215,7 +315,7 @@ namespace CaseRunner
             return domain;
         }
 
-        static string CreatePythonModule(string className)
+        static string CreatePythonModule(TestCase testCase)
         {
             var modulePath = Path.Combine(Path.GetTempPath(), "domain_test_module");
             if (Directory.Exists(modulePath))
@@ -227,7 +327,7 @@ namespace CaseRunner
             File.Create(Path.Combine(modulePath, "__init__.py")).Close(); //Create and don't forget to close!
             using (var writer = File.CreateText(Path.Combine(modulePath, "mod.py")))
             {
-                writer.Write(PythonCode.Replace("{class}", className));
+                writer.Write(testCase.PythonCode);
             }
 
             return null;
