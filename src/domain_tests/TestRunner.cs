@@ -18,7 +18,7 @@ namespace Python.DomainReloadTests
     /// 4. This class then runs the C# code.
     ///
     /// But wait there's more indirection. The C# code that's run -- known as
-    /// the test runner --  
+    /// the test runner --
     /// This class compiles a DLL that contains the class which code will change
     /// and a runner executable that will run Python code referencing the class.
     /// Each test case:
@@ -59,7 +59,7 @@ namespace Python.DomainReloadTests
             /// will be called when DotNetBefore is loaded; after will be
             /// called (twice) when DotNetAfter is loaded.
             /// To make the test fail, have those functions raise exceptions.
-            /// 
+            ///
             /// Make sure there's no leading spaces since Python cares.
             /// </summary>
             public string PythonCode;
