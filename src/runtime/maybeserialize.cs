@@ -214,7 +214,7 @@ namespace Python.Runtime
             {
                 if (m_type == null)
                 {
-                    throw new SerializationException($"The .NET object underlying {m_name} no longer exists");
+                    throw new SerializationException($"The .NET Type {m_name} no longer exists");
                 }
                 return m_type;
             }
@@ -244,11 +244,11 @@ namespace Python.Runtime
     }
 
     [Serializable]
-    internal struct MaybeMethodBase : ISerializable
+    internal struct MaybeMethod<T> : ISerializable where T: MethodBase//, MethodInfo, ConstructorInfo
     {
-        public static implicit operator MethodBase (MaybeMethodBase self) => self.Value;
+        public static implicit operator T (MaybeMethod<T> self) => (T)self.Value;
 
-        public static implicit operator MaybeMethodBase (MethodBase ob) => new MaybeMethodBase(ob);
+        public static implicit operator MaybeMethod<T> (MethodBase ob) => new MaybeMethod<T>((T)ob);
 
         string m_name;
         MethodBase m_info;
@@ -258,31 +258,33 @@ namespace Python.Runtime
                         BindingFlags.Instance |
                         BindingFlags.Public |
                         BindingFlags.NonPublic;
-        public MethodBase Value
+        public T Value
         {
             get
             {
                 if (m_info == null)
                 {
-                    throw new SerializationException($"The .NET object underlying {m_name} no longer exists");
+                    throw new SerializationException($"The .NET {typeof(T)} {m_name} no longer exists");
                 }
-                return m_info;
+                return (T)m_info;
             }
         }
+        public T UnsafeValue { get { return (T)m_info; } }
+        
         public override string ToString()
         {
-            return (m_info != null ? m_info.ToString() : $"missing type: {m_name}");
+            return (m_info != null ? m_info.ToString() : $"missing method info: {m_name}");
         }
         public string Name {get{return m_name;}}
         public bool Valid => m_info != null;
 
-        public MaybeMethodBase(MethodBase mi)
+        public MaybeMethod(T mi)
         {
             m_info = mi;
-            m_name = m_info.ToString();
+            m_name = mi?.ToString();
         }
 
-        internal MaybeMethodBase(SerializationInfo info, StreamingContext context)
+        internal MaybeMethod(SerializationInfo info, StreamingContext context)
         {
             m_name = info.GetString("s");
             m_info = null;
@@ -300,7 +302,7 @@ namespace Python.Runtime
                             types[i] = Type.GetType(param[i]);
                         }
                         m_info = tp.GetMethod(field_name, k_flags, binder:null, types:types, modifiers:null);
-                        if (m_info == null) // maybe a constructor then
+                        if (m_info == null && m_name.Contains(".Ctor"))
                         {
                             m_info = tp.GetConstructor(k_flags, binder:null, types:types, modifiers:null);
                         }

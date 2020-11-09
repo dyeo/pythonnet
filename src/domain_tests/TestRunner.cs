@@ -67,68 +67,81 @@ namespace Python.DomainReloadTests
 
         static TestCase[] Cases = new TestCase[]
         {
-            new TestCase {
+            new TestCase
+            {
                 Name = "class_rename",
                 DotNetBefore = @"
-                    namespace TestNamespace {
+                    namespace TestNamespace
+                    {
                         [System.Serializable]
                         public class Before { }
                     }",
                 DotNetAfter = @"
-                    namespace TestNamespace {
+                    namespace TestNamespace
+                    {
                         [System.Serializable]
                         public class After { }
                     }",
                 PythonCode = @"
 import clr
+import sys
 clr.AddReference('DomainTests')
 from TestNamespace import Before
-def before():
-    import sys
+
+def before_reload():
     sys.my_cls = Before
-def after():
-    import sys
+
+def after_reload():
     try:
         sys.my_cls.Member()
-    except TypeError:
+    except AttributeError:
         print('Caught expected exception')
     else:
         raise AssertionError('Failed to throw exception')
                     ",
             },
-            new TestCase {
+
+            new TestCase 
+            {
                 Name = "member_rename",
                 DotNetBefore = @"
-                    namespace TestNamespace {
+                    namespace TestNamespace
+                    {
                         [System.Serializable]
-                        public class Cls { public int Before() { return 5; } }
+                        public class Cls { public static int Before() { return 5; } }
                     }",
                 DotNetAfter = @"
-                    namespace TestNamespace {
+                    namespace TestNamespace
+                    {
                         [System.Serializable]
-                        public class Cls { public int After() { return 10; } }
+                        public class Cls { public static int After() { return 10; } }
                     }",
                 PythonCode = @"
 import clr
+import sys
 clr.AddReference('DomainTests')
 import TestNamespace
-def before():
-    import sys
+
+def before_reload():
     sys.my_cls = TestNamespace.Cls
     sys.my_fn = TestNamespace.Cls.Before
-def after():
-    import sys
+    sys.my_fn()
+    TestNamespace.Cls.Before()
+
+def after_reload():
 
     # We should have reloaded the class so we can access the new function.
     assert 10 == sys.my_cls.After()
+    assert True is True
 
     try:
-        # We should have reloaded the class so we can't access the old function.
+        # We should have reloaded the class. The old function still exists, but is now invalid.
+        print(dir(sys.my_cls))
         sys.my_cls.Before()
-    except AttributeError:
-        print('Caught expected AttributeError')
+    except TypeError:
+        print('Caught expected TypeError')
     else:
-        raise AssertionError('Failed to throw exception: expected AttributeError accessing class member that no longer exists')
+        raise AssertionError('Failed to throw exception: expected TypeError calling class member that no longer exists')
 
     try:
         # We should have failed to reload the function which no longer exists.
@@ -167,7 +180,7 @@ namespace CaseRunner
                     dynamic sys = Py.Import(""sys"");
                     sys.path.append(new PyString(temp));
                     dynamic test_mod = Py.Import(""domain_test_module.mod"");
-                    test_mod.{1}();
+                    test_mod.{1}_reload();
                 }}
                 PythonEngine.Shutdown();
             }}
@@ -197,10 +210,10 @@ namespace CaseRunner
             else
             {
                 string testName = args[0];
-                Console.WriteLine($"Looking for domain reload test case {testName}");
+                Console.WriteLine($"-- Looking for domain reload test case {testName}");
                 testCase = Cases.First(c => c.Name == testName);
             }
-            Console.WriteLine($"Running domain reload test case: {testCase.Name}");
+            Console.WriteLine($"-- Running domain reload test case: {testCase.Name}");
 
             var tempFolderPython = Path.Combine(Path.GetTempPath(), "Python.Runtime.dll");
             if (File.Exists(tempFolderPython))
@@ -214,9 +227,14 @@ namespace CaseRunner
             {
                 var runnerAssembly = CreateCaseRunnerAssembly(verb:"before");
                 CreateTestClassAssembly(testCase.DotNetBefore);
-
-                var runnerDomain = CreateDomain("case runner before");
-                RunAndUnload(runnerDomain, runnerAssembly);
+                {
+                    var runnerDomain = CreateDomain("case runner before");
+                    RunAndUnload(runnerDomain, runnerAssembly);
+                }
+                {
+                    var runnerDomain = CreateDomain("case runner before (again)");
+                    RunAndUnload(runnerDomain, runnerAssembly);
+                }
             }
 
             {
@@ -241,7 +259,7 @@ namespace CaseRunner
         {
             // Somehow the stack traces during execution sometimes have the wrong line numbers.
             // Add some info for when debugging is required.
-            Console.WriteLine($"Runining domain {domain.FriendlyName}");
+            Console.WriteLine($"-- Running domain {domain.FriendlyName}");
             domain.ExecuteAssembly(assemblyPath);
             AppDomain.Unload(domain);
             GC.Collect();

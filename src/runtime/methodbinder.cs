@@ -7,6 +7,7 @@ using System.Linq;
 
 namespace Python.Runtime
 {
+    using MaybeMethodBase = MaybeMethod<MethodBase>;
     /// <summary>
     /// A MethodBinder encapsulates information about a (possibly overloaded)
     /// managed method, and is responsible for selecting the right method given
@@ -17,8 +18,10 @@ namespace Python.Runtime
     internal class MethodBinder
     {
         public List<MaybeMethodBase> list;
+
         [NonSerialized]
         public MethodBase[] methods;
+
         [NonSerialized]
         public bool init = false;
         public bool allow_threads = true;
@@ -311,6 +314,16 @@ namespace Python.Runtime
             else
             {
                 _methods = GetMethods();
+                if (_methods.Length == 0)
+                {
+                    var msg = new StringBuilder("The underlying C# method(s) have been deleted");
+                    if (list.Count > 0 && list[0].Name != null)
+                    {
+                        msg.Append($": {list[0].ToString()}");
+                    }
+                    Exceptions.RaiseTypeError(msg.ToString());
+                    return null;
+                }
             }
 
             // TODO: Clean up
@@ -679,6 +692,11 @@ namespace Python.Runtime
 
             if (binding == null)
             {
+                if (Exceptions.ErrorOccurred())
+                {
+                    // Bind has set an exception, bail out.
+                    return IntPtr.Zero;
+                }
                 var value = new StringBuilder("No method matches given arguments");
                 if (methodinfo != null && methodinfo.Length > 0)
                 {

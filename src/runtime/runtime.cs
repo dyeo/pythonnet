@@ -683,7 +683,7 @@ namespace Python.Runtime
 
                 if (mt is ClassBase)
                 {
-                    t = ((ClassBase)mt).type;
+                    t = ((ClassBase)mt).type.Value;
                 }
                 else if (mt is CLRObject)
                 {

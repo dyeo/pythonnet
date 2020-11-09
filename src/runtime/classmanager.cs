@@ -108,11 +108,12 @@ namespace Python.Runtime
             var loadedObjs = new Dictionary<ManagedType, InterDomainContext>();
             foreach (var pair in _cache)
             {
-                Console.WriteLine($"{pair.Key}, {pair.Value}");
                 if (!pair.Key.Valid)
                 {
                     continue;
                 }
+                // re-init the class; pick-up possible new members after a domain reload.
+                InitClassBase(pair.Key, pair.Value);
                 cache.Add(pair.Key, pair.Value);
                 var context = contexts[pair.Value.pyHandle];
                 pair.Value.Load(context);

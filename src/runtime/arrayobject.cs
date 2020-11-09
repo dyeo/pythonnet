@@ -30,7 +30,7 @@ namespace Python.Runtime
             IntPtr op = Runtime.PyTuple_GetItem(args, 0);
             object result;
 
-            if (!Converter.ToManaged(op, self.type, out result, true))
+            if (!Converter.ToManaged(op, self.type.Value, out result, true))
             {
                 return IntPtr.Zero;
             }
