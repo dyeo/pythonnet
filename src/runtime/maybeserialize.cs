@@ -302,7 +302,7 @@ namespace Python.Runtime
                             types[i] = Type.GetType(param[i]);
                         }
                         m_info = tp.GetMethod(field_name, k_flags, binder:null, types:types, modifiers:null);
-                        if (m_info == null && m_name.Contains(".Ctor"))
+                        if (m_info == null && m_name.Contains(".ctor"))
                         {
                             m_info = tp.GetConstructor(k_flags, binder:null, types:types, modifiers:null);
                         }

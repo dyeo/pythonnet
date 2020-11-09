@@ -103,7 +103,7 @@ def after_reload():
 
             new TestCase 
             {
-                Name = "member_rename",
+                Name = "static_member_rename",
                 DotNetBefore = @"
                     namespace TestNamespace
                     {
@@ -136,7 +136,6 @@ def after_reload():
 
     try:
         # We should have reloaded the class. The old function still exists, but is now invalid.
-        print(dir(sys.my_cls))
         sys.my_cls.Before()
     except TypeError:
         print('Caught expected TypeError')
@@ -149,7 +148,59 @@ def after_reload():
     except TypeError:
         print('Caught expected TypeError')
     else:
-        raise AssertionError('Failed to throw exception: expected TypeError accessing .NET field that no longer exists')
+        raise AssertionError('Failed to throw exception: expected TypeError calling unbound .NET function that no longer exists')
+                    ",
+            },
+
+
+            new TestCase 
+            {
+                Name = "member_rename",
+                DotNetBefore = @"
+                    namespace TestNamespace
+                    {
+                        [System.Serializable]
+                        public class Cls { public int Before() { return 5; } }
+                    }",
+                DotNetAfter = @"
+                    namespace TestNamespace
+                    {
+                        [System.Serializable]
+                        public class Cls { public int After() { return 10; } }
+                    }",
+                PythonCode = @"
+import clr
+import sys
+clr.AddReference('DomainTests')
+import TestNamespace
+
+def before_reload():
+    sys.my_cls = TestNamespace.Cls()
+    sys.my_fn = TestNamespace.Cls().Before
+    sys.my_fn()
+    TestNamespace.Cls().Before()
+
+def after_reload():
+
+    # We should have reloaded the class so we can access the new function.
+    assert 10 == sys.my_cls.After()
+    assert True is True
+
+    try:
+        # We should have reloaded the class. The old function still exists, but is now invalid.
+        sys.my_cls.Before()
+    except TypeError:
+        print('Caught expected TypeError')
+    else:
+        raise AssertionError('Failed to throw exception: expected TypeError calling class member that no longer exists')
+
+    try:
+        # We should have failed to reload the function which no longer exists.
+        sys.my_fn()
+    except TypeError:
+        print('Caught expected TypeError')
+    else:
+        raise AssertionError('Failed to throw exception: expected TypeError calling unbound .NET function that no longer exists')
                     ",
             },
         };

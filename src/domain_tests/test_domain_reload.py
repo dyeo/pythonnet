@@ -15,5 +15,8 @@ def _run_test(testname):
 def test_rename_class():
     _run_test('class_rename')
 
+def test_rename_class_member_static_function():
+    _run_test('static_member_rename')
+
 def test_rename_class_member_function():
     _run_test('member_rename')
