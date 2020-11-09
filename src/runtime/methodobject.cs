@@ -32,7 +32,7 @@ namespace Python.Runtime
         public MethodObject(Type type, string name, MethodInfo[] info, bool allow_threads = true)
         {
             this.type = type;
-            base.name = name;
+            this.name = name;
             this.infoList = new List<MaybeMethodInfo>();
             binder = new MethodBinder();
             foreach (MethodInfo item in info)
