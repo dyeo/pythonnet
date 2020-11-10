@@ -92,6 +92,8 @@
     <Compile Include="doctest.cs" />
     <Compile Include="subclasstest.cs" />
     <Compile Include="ReprTest.cs" />
+    <Compile Include="nonexportable.cs" />
+    <Compile Include="mp_lengthtest.cs" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
@@ -103,7 +105,7 @@
       <Name>Python.Runtime</Name>
     </ProjectReference>
   </ItemGroup>
-  <Import Project="$(MSBuildBinPath)\Microsoft.CSHARP.Targets" />
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
   <PropertyGroup>
     <TargetAssembly>$(TargetPath)</TargetAssembly>
     <TargetAssemblyPdb>$(TargetDir)$(TargetName).pdb</TargetAssemblyPdb>

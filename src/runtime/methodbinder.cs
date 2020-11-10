@@ -13,6 +13,7 @@ namespace Python.Runtime
     /// a set of Python arguments. This is also used as a base class for the
     /// ConstructorBinder, a minor variation used to invoke constructors.
     /// </summary>
+    [Serializable]
     internal class MethodBinder
     {
         public ArrayList list;
@@ -203,6 +204,16 @@ namespace Python.Runtime
                 return 3000;
             }
 
+            if (t.IsArray)
+            {
+                Type e = t.GetElementType();
+                if (e == objectType)
+                {
+                    return 2500;
+                }
+                return 100 + ArgPrecedence(e);
+            }
+
             TypeCode tc = Type.GetTypeCode(t);
             // TODO: Clean up
             switch (tc)
@@ -250,16 +261,6 @@ namespace Python.Runtime
                     return 40;
             }
 
-            if (t.IsArray)
-            {
-                Type e = t.GetElementType();
-                if (e == objectType)
-                {
-                    return 2500;
-                }
-                return 100 + ArgPrecedence(e);
-            }
-
             return 2000;
         }
 
@@ -291,8 +292,8 @@ namespace Python.Runtime
                 IntPtr valueList = Runtime.PyDict_Values(kw);
                 for (int i = 0; i < pynkwargs; ++i)
                 {
-                    var keyStr = Runtime.GetManagedString(Runtime.PyList_GetItem(keylist, i));
-                    kwargDict[keyStr] = Runtime.PyList_GetItem(valueList, i);
+                    var keyStr = Runtime.GetManagedString(Runtime.PyList_GetItem(new BorrowedReference(keylist), i));
+                    kwargDict[keyStr] = Runtime.PyList_GetItem(new BorrowedReference(valueList), i).DangerousGetAddress();
                 }
                 Runtime.XDecref(keylist);
                 Runtime.XDecref(valueList);
@@ -369,6 +370,37 @@ namespace Python.Runtime
             return null;
         }
 
+        static IntPtr HandleParamsArray(IntPtr args, int arrayStart, int pyArgCount, out bool isNewReference)
+        {
+            isNewReference = false;
+            IntPtr op;
+            // for a params method, we may have a sequence or single/multiple items
+            // here we look to see if the item at the paramIndex is there or not
+            // and then if it is a sequence itself.
+            if ((pyArgCount - arrayStart) == 1)
+            {
+                // we only have one argument left, so we need to check it
+                // to see if it is a sequence or a single item
+                IntPtr item = Runtime.PyTuple_GetItem(args, arrayStart);
+                if (!Runtime.PyString_Check(item) && Runtime.PySequence_Check(item))
+                {
+                    // it's a sequence (and not a string), so we use it as the op
+                    op = item;
+                }
+                else
+                {
+                    isNewReference = true;
+                    op = Runtime.PyTuple_GetSlice(args, arrayStart, pyArgCount);
+                }
+            }
+            else
+            {
+                isNewReference = true;
+                op = Runtime.PyTuple_GetSlice(args, arrayStart, pyArgCount);
+            }
+            return op;
+        }
+
         /// <summary>
         /// Attempts to convert Python positional argument tuple and keyword argument table
         /// into an array of managed objects, that can be passed to a method.
@@ -397,8 +429,9 @@ namespace Python.Runtime
             {
                 var parameter = pi[paramIndex];
                 bool hasNamedParam = kwargDict.ContainsKey(parameter.Name);
+                bool isNewReference = false;
 
-                if (paramIndex >= pyArgCount && !hasNamedParam)
+                if (paramIndex >= pyArgCount && !(hasNamedParam || (paramsArray && paramIndex == arrayStart)))
                 {
                     if (defaultArgList != null)
                     {
@@ -415,11 +448,14 @@ namespace Python.Runtime
                 }
                 else
                 {
-                    op = (arrayStart == paramIndex)
-                        // map remaining Python arguments to a tuple since
-                        // the managed function accepts it - hopefully :]
-                        ? Runtime.PyTuple_GetSlice(args, arrayStart, pyArgCount)
-                        : Runtime.PyTuple_GetItem(args, paramIndex);
+                    if(arrayStart == paramIndex)
+                    {
+                        op = HandleParamsArray(args, arrayStart, pyArgCount, out isNewReference);                                                                 
+                    }
+                    else
+                    {
+                        op = Runtime.PyTuple_GetItem(args, paramIndex);
+                    }
                 }
 
                 bool isOut;
@@ -428,7 +464,7 @@ namespace Python.Runtime
                     return null;
                 }
 
-                if (arrayStart == paramIndex)
+                if (isNewReference)
                 {
                     // TODO: is this a bug? Should this happen even if the conversion fails?
                     // GetSlice() creates a new reference but GetItem()
@@ -543,9 +579,9 @@ namespace Python.Runtime
         {
             defaultArgList = null;
             var match = false;
-            paramsArray = false;
+            paramsArray = parameters.Length > 0 ? Attribute.IsDefined(parameters[parameters.Length - 1], typeof(ParamArrayAttribute)) : false;
 
-            if (positionalArgumentCount == parameters.Length)
+            if (positionalArgumentCount == parameters.Length && kwargDict.Count == 0)
             {
                 match = true;
             }
@@ -572,7 +608,7 @@ namespace Python.Runtime
                         // to be passed in as the parameter value
                         defaultArgList.Add(parameters[v].GetDefaultValue());
                     }
-                    else
+                    else if(!paramsArray)
                     {
                         match = false;
                     }
@@ -599,6 +635,40 @@ namespace Python.Runtime
             return Invoke(inst, args, kw, info, null);
         }
 
+        protected static void AppendArgumentTypes(StringBuilder to, IntPtr args)
+        {
+            long argCount = Runtime.PyTuple_Size(args);
+            to.Append("(");
+            for (long argIndex = 0; argIndex < argCount; argIndex++)
+            {
+                var arg = Runtime.PyTuple_GetItem(args, argIndex);
+                if (arg != IntPtr.Zero)
+                {
+                    var type = Runtime.PyObject_Type(arg);
+                    if (type != IntPtr.Zero)
+                    {
+                        try
+                        {
+                            var description = Runtime.PyObject_Unicode(type);
+                            if (description != IntPtr.Zero)
+                            {
+                                to.Append(Runtime.GetManagedString(description));
+                                Runtime.XDecref(description);
+                            }
+                        }
+                        finally
+                        {
+                            Runtime.XDecref(type);
+                        }
+                    }
+                }
+
+                if (argIndex + 1 < argCount)
+                    to.Append(", ");
+            }
+            to.Append(')');
+        }
+
         internal virtual IntPtr Invoke(IntPtr inst, IntPtr args, IntPtr kw, MethodBase info, MethodInfo[] methodinfo)
         {
             Binding binding = Bind(inst, args, kw, info, methodinfo);
@@ -613,29 +683,8 @@ namespace Python.Runtime
                     value.Append($" for {methodinfo[0].Name}");
                 }
 
-                long argCount = Runtime.PyTuple_Size(args);
-                value.Append(": (");
-                for(long argIndex = 0; argIndex < argCount; argIndex++) {
-                    var arg = Runtime.PyTuple_GetItem(args, argIndex);
-                    if (arg != IntPtr.Zero) {
-                        var type = Runtime.PyObject_Type(arg);
-                        if (type != IntPtr.Zero) {
-                            try {
-                                var description = Runtime.PyObject_Unicode(type);
-                                if (description != IntPtr.Zero) {
-                                    value.Append(Runtime.GetManagedString(description));
-                                    Runtime.XDecref(description);
-                                }
-                            } finally {
-                                Runtime.XDecref(type);
-                            }
-                        }
-                    }
-
-                    if (argIndex + 1 < argCount)
-                        value.Append(", ");
-                }
-                value.Append(')');
+                value.Append(": ");
+                AppendArgumentTypes(to: value, args);
                 Exceptions.SetError(Exceptions.TypeError, value.ToString());
                 return IntPtr.Zero;
             }
@@ -696,7 +745,7 @@ namespace Python.Runtime
                     Type pt = pi[i].ParameterType;
                     if (pi[i].IsOut || pt.IsByRef)
                     {
-                        v = Converter.ToPython(binding.args[i], pt);
+                        v = Converter.ToPython(binding.args[i], pt.GetElementType());
                         Runtime.PyTuple_SetItem(t, n, v);
                         n++;
                     }

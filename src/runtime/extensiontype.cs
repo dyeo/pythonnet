@@ -8,6 +8,7 @@ namespace Python.Runtime
     /// type object, such as the types that represent CLR methods, fields,
     /// etc. Instances implemented by this class do not support sub-typing.
     /// </summary>
+    [Serializable]
     internal abstract class ExtensionType : ManagedType
     {
         public ExtensionType()
@@ -28,19 +29,24 @@ namespace Python.Runtime
 
             IntPtr py = Runtime.PyType_GenericAlloc(tp, 0);
 
-            GCHandle gc = GCHandle.Alloc(this);
-            Marshal.WriteIntPtr(py, ObjectOffset.magic(tp), (IntPtr)gc);
+            // Steals a ref to tpHandle.
+            tpHandle = tp;
+            pyHandle = py;
+
+            SetupGc();
+        }
+
+        void SetupGc ()
+        {
+            GCHandle gc = AllocGCHandle(TrackTypes.Extension);
+            Marshal.WriteIntPtr(pyHandle, ObjectOffset.magic(tpHandle), (IntPtr)gc);
 
             // We have to support gc because the type machinery makes it very
             // hard not to - but we really don't have a need for it in most
             // concrete extension types, so untrack the object to save calls
             // from Python into the managed runtime that are pure overhead.
 
-            Runtime.PyObject_GC_UnTrack(py);
-
-            tpHandle = tp;
-            pyHandle = py;
-            gcHandle = gc;
+            Runtime.PyObject_GC_UnTrack(pyHandle);
         }
 
 
@@ -49,11 +55,16 @@ namespace Python.Runtime
         /// </summary>
         public static void FinalizeObject(ManagedType self)
         {
+            ClearObjectDict(self.pyHandle);
             Runtime.PyObject_GC_Del(self.pyHandle);
-            Runtime.XDecref(self.tpHandle);
-            self.gcHandle.Free();
+            // Not necessary for decref of `tpHandle`.
+            self.FreeGCHandle();
         }
 
+        protected void Dealloc()
+        {
+            FinalizeObject(this);
+        }
 
         /// <summary>
         /// Type __setattr__ implementation.
@@ -88,8 +99,14 @@ namespace Python.Runtime
         {
             // Clean up a Python instance of this extension type. This
             // frees the allocated Python object and decrefs the type.
-            ManagedType self = GetManagedObject(ob);
-            FinalizeObject(self);
+            var self = (ExtensionType)GetManagedObject(ob);
+            self.Dealloc();
+        }
+
+        protected override void OnLoad(InterDomainContext context)
+        {
+            base.OnLoad(context);
+            SetupGc();
         }
     }
 }

@@ -137,7 +137,7 @@ namespace Python.Runtime
         /// </summary>
         internal static void UpdatePath()
         {
-            IntPtr list = Runtime.PySys_GetObject("path");
+            BorrowedReference list = Runtime.PySys_GetObject("path");
             var count = Runtime.PyList_Size(list);
             if (count != pypath.Count)
             {
@@ -145,7 +145,7 @@ namespace Python.Runtime
                 probed.Clear();
                 for (var i = 0; i < count; i++)
                 {
-                    IntPtr item = Runtime.PyList_GetItem(list, i);
+                    BorrowedReference item = Runtime.PyList_GetItem(list, i);
                     string path = Runtime.GetManagedString(item);
                     if (path != null)
                     {
@@ -199,19 +199,14 @@ namespace Python.Runtime
         /// </summary>
         public static Assembly LoadAssembly(string name)
         {
-            Assembly assembly = null;
             try
             {
-                assembly = Assembly.Load(name);
+                return Assembly.Load(name);
             }
-            catch (Exception)
+            catch (FileNotFoundException)
             {
-                //if (!(e is System.IO.FileNotFoundException))
-                //{
-                //    throw;
-                //}
+                return null;
             }
-            return assembly;
         }
 
 
@@ -221,18 +216,8 @@ namespace Python.Runtime
         public static Assembly LoadAssemblyPath(string name)
         {
             string path = FindAssembly(name);
-            Assembly assembly = null;
-            if (path != null)
-            {
-                try
-                {
-                    assembly = Assembly.LoadFrom(path);
-                }
-                catch (Exception)
-                {
-                }
-            }
-            return assembly;
+            if (path == null) return null;
+            return Assembly.LoadFrom(path);
         }
 
         /// <summary>
@@ -242,25 +227,14 @@ namespace Python.Runtime
         /// <returns></returns>
         public static Assembly LoadAssemblyFullPath(string name)
         {
-            Assembly assembly = null;
             if (Path.IsPathRooted(name))
             {
-                if (!Path.HasExtension(name))
-                {
-                    name = name + ".dll";
-                }
                 if (File.Exists(name))
                 {
-                    try
-                    {
-                        assembly = Assembly.LoadFrom(name);
-                    }
-                    catch (Exception)
-                    {
-                    }
+                    return Assembly.LoadFrom(name);
                 }
             }
-            return assembly;
+            return null;
         }
 
         /// <summary>
@@ -291,7 +265,7 @@ namespace Python.Runtime
         /// actually loads an assembly.
         /// Call ONLY for namespaces that HAVE NOT been cached yet.
         /// </remarks>
-        public static bool LoadImplicit(string name, bool warn = true)
+        public static bool LoadImplicit(string name, Action<Exception> assemblyLoadErrorHandler, bool warn = true)
         {
             string[] names = name.Split('.');
             var loaded = false;
@@ -308,14 +282,23 @@ namespace Python.Runtime
                         assembliesSet = new HashSet<Assembly>(AppDomain.CurrentDomain.GetAssemblies());
                     }
                     Assembly a = FindLoadedAssembly(s);
-                    if (a == null)
+                    try
                     {
-                        a = LoadAssemblyPath(s);
+                        if (a == null)
+                        {
+                            a = LoadAssemblyPath(s);
+                        }
+
+                        if (a == null)
+                        {
+                            a = LoadAssembly(s);
+                        }
                     }
-                    if (a == null)
-                    {
-                        a = LoadAssembly(s);
-                    }
+                    catch (FileLoadException e) { assemblyLoadErrorHandler(e); }
+                    catch (BadImageFormatException e) { assemblyLoadErrorHandler(e); }
+                    catch (System.Security.SecurityException e) { assemblyLoadErrorHandler(e); }
+                    catch (PathTooLongException e) { assemblyLoadErrorHandler(e); }
+
                     if (a != null && !assembliesSet.Contains(a))
                     {
                         loaded = true;
@@ -346,6 +329,10 @@ namespace Python.Runtime
         /// </summary>
         internal static void ScanAssembly(Assembly assembly)
         {
+            if (assembly.GetCustomAttribute<PyExportAttribute>()?.Export == false)
+            {
+                return;
+            }
             // A couple of things we want to do here: first, we want to
             // gather a list of all of the namespaces contributed to by
             // the assembly.
@@ -452,12 +439,13 @@ namespace Python.Runtime
         /// looking in the currently loaded assemblies for the named
         /// type. Returns null if the named type cannot be found.
         /// </summary>
+        [Obsolete("Use LookupTypes and handle name conflicts")]
         public static Type LookupType(string qname)
         {
             foreach (Assembly assembly in assemblies)
             {
                 Type type = assembly.GetType(qname);
-                if (type != null)
+                if (type != null && IsExported(type))
                 {
                     return type;
                 }
@@ -465,25 +453,33 @@ namespace Python.Runtime
             return null;
         }
 
+        /// <summary>
+        /// Returns the <see cref="Type"/> objects for the given qualified name,
+        /// looking in the currently loaded assemblies for the named
+        /// type.
+        /// </summary>
+        public static IEnumerable<Type> LookupTypes(string qualifiedName)
+            => assemblies.Select(assembly => assembly.GetType(qualifiedName)).Where(type => type != null && IsExported(type));
+
         internal static Type[] GetTypes(Assembly a)
         {
             if (a.IsDynamic)
             {
                 try
                 {
-                    return a.GetTypes();
+                    return a.GetTypes().Where(IsExported).ToArray();
                 }
                 catch (ReflectionTypeLoadException exc)
                 {
                     // Return all types that were successfully loaded
-                    return exc.Types.Where(x => x != null).ToArray();
+                    return exc.Types.Where(x => x != null && IsExported(x)).ToArray();
                 }
             }
             else
             {
                 try
                 {
-                    return a.GetExportedTypes();
+                    return a.GetExportedTypes().Where(IsExported).ToArray();
                 }
                 catch (FileNotFoundException)
                 {
@@ -491,5 +487,7 @@ namespace Python.Runtime
                 }
             }
         }
+
+        static bool IsExported(Type type) => type.GetCustomAttribute<PyExportAttribute>()?.Export != false;
     }
 }

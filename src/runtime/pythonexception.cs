@@ -1,4 +1,6 @@
 using System;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Python.Runtime
 {
@@ -20,7 +22,7 @@ namespace Python.Runtime
         public PythonException()
         {
             IntPtr gs = PythonEngine.AcquireLock();
-            Runtime.PyErr_Fetch(ref _pyType, ref _pyValue, ref _pyTB);
+            Runtime.PyErr_Fetch(out _pyType, out _pyValue, out _pyTB);
             if (_pyType != IntPtr.Zero && _pyValue != IntPtr.Zero)
             {
                 string type;
@@ -145,6 +147,52 @@ namespace Python.Runtime
         }
 
         /// <summary>
+        /// Formats this PythonException object into a message as would be printed
+        /// out via the Python console. See traceback.format_exception
+        /// </summary>
+        public string Format()
+        {
+            string res;
+            IntPtr gs = PythonEngine.AcquireLock();
+            try
+            {
+                if (_pyTB != IntPtr.Zero && _pyType != IntPtr.Zero && _pyValue != IntPtr.Zero)
+                {
+                    Runtime.XIncref(_pyType);
+                    Runtime.XIncref(_pyValue);
+                    Runtime.XIncref(_pyTB);
+                    using (PyObject pyType = new PyObject(_pyType))
+                    using (PyObject pyValue = new PyObject(_pyValue))
+                    using (PyObject pyTB = new PyObject(_pyTB))
+                    using (PyObject tb_mod = PythonEngine.ImportModule("traceback"))
+                    {
+                        var buffer = new StringBuilder();
+                        var values = tb_mod.InvokeMethod("format_exception", pyType, pyValue, pyTB);
+                        foreach (PyObject val in values)
+                        {
+                            buffer.Append(val.ToString());
+                        }
+                        res = buffer.ToString();
+                    }
+                }
+                else
+                {
+                    res = StackTrace;
+                }
+            }
+            finally
+            {
+                PythonEngine.ReleaseLock(gs);
+            }
+            return res;
+        }
+
+        public bool IsMatches(IntPtr exc)
+        {
+            return Runtime.PyErr_GivenExceptionMatches(PyType, exc) != 0;
+        }
+
+        /// <summary>
         /// Dispose Method
         /// </summary>
         /// <remarks>
@@ -160,12 +208,23 @@ namespace Python.Runtime
                 if (Runtime.Py_IsInitialized() > 0 && !Runtime.IsFinalizing)
                 {
                     IntPtr gs = PythonEngine.AcquireLock();
-                    Runtime.XDecref(_pyType);
-                    Runtime.XDecref(_pyValue);
+                    if (_pyType != IntPtr.Zero)
+                    {
+                        Runtime.XDecref(_pyType);
+                        _pyType= IntPtr.Zero;
+                    }
+
+                    if (_pyValue != IntPtr.Zero)
+                    {
+                        Runtime.XDecref(_pyValue);
+                        _pyValue = IntPtr.Zero;
+                    }
+
                     // XXX Do we ever get TraceBack? //
                     if (_pyTB != IntPtr.Zero)
                     {
                         Runtime.XDecref(_pyTB);
+                        _pyTB = IntPtr.Zero;
                     }
                     PythonEngine.ReleaseLock(gs);
                 }
@@ -189,6 +248,30 @@ namespace Python.Runtime
         public static bool Matches(IntPtr ob)
         {
             return Runtime.PyErr_ExceptionMatches(ob) != 0;
+        }
+
+        public static void ThrowIfIsNull(IntPtr ob)
+        {
+            if (ob == IntPtr.Zero)
+            {
+                throw new PythonException();
+            }
+        }
+
+        internal static void ThrowIfIsNull(BorrowedReference reference)
+        {
+            if (reference.IsNull)
+            {
+                throw new PythonException();
+            }
+        }
+
+        public static void ThrowIfIsNotZero(int value)
+        {
+            if (value != 0)
+            {
+                throw new PythonException();
+            }
         }
     }
 }

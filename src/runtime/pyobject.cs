@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Dynamic;
+using System.Linq;
 using System.Linq.Expressions;
 
 namespace Python.Runtime
@@ -19,7 +20,8 @@ namespace Python.Runtime
     /// PY3: https://docs.python.org/3/c-api/object.html
     /// for details.
     /// </summary>
-    public class PyObject : DynamicObject, IEnumerable, IPyDisposable
+    [Serializable]
+    public partial class PyObject : DynamicObject, IEnumerable, IPyDisposable
     {
 #if TRACE_ALLOC
         /// <summary>
@@ -29,8 +31,8 @@ namespace Python.Runtime
 #endif  
 
         protected internal IntPtr obj = IntPtr.Zero;
-        private bool disposed = false;
-        private bool _finalized = false;
+
+        internal BorrowedReference Reference => new BorrowedReference(obj);
 
         /// <summary>
         /// PyObject Constructor
@@ -43,17 +45,26 @@ namespace Python.Runtime
         /// </remarks>
         public PyObject(IntPtr ptr)
         {
+            if (ptr == IntPtr.Zero) throw new ArgumentNullException(nameof(ptr));
+
             obj = ptr;
+            Finalizer.Instance.ThrottledCollect();
 #if TRACE_ALLOC
             Traceback = new StackTrace(1);
 #endif
         }
 
-        // Protected default constructor to allow subclasses to manage
-        // initialization in different ways as appropriate.
-
-        protected PyObject()
+        /// <summary>
+        /// Creates new <see cref="PyObject"/> pointing to the same object as
+        /// the <paramref name="reference"/>. Increments refcount, allowing <see cref="PyObject"/>
+        /// to have ownership over its own reference.
+        /// </summary>
+        internal PyObject(BorrowedReference reference)
         {
+            if (reference.IsNull) throw new ArgumentNullException(nameof(reference));
+
+            obj = Runtime.SelfIncRef(reference.DangerousGetAddress());
+            Finalizer.Instance.ThrottledCollect();
 #if TRACE_ALLOC
             Traceback = new StackTrace(1);
 #endif
@@ -67,12 +78,6 @@ namespace Python.Runtime
             {
                 return;
             }
-            if (_finalized || disposed)
-            {
-                return;
-            }
-            // Prevent a infinity loop by calling GC.WaitForPendingFinalizers
-            _finalized = true;
             Finalizer.Instance.AddFinalizedObject(this);
         }
 
@@ -91,7 +96,8 @@ namespace Python.Runtime
 
 
         /// <summary>
-        /// FromManagedObject Method
+        /// Gets raw Python proxy for this object (bypasses all conversions,
+        /// except <c>null</c> &lt;==&gt; <c>None</c>)
         /// </summary>
         /// <remarks>
         /// Given an arbitrary managed object, return a Python instance that
@@ -162,17 +168,41 @@ namespace Python.Runtime
         /// </remarks>
         protected virtual void Dispose(bool disposing)
         {
-            if (!disposed)
+            if (this.obj == IntPtr.Zero)
             {
-                if (Runtime.Py_IsInitialized() > 0 && !Runtime.IsFinalizing)
-                {
-                    IntPtr gs = PythonEngine.AcquireLock();
-                    Runtime.XDecref(obj);
-                    obj = IntPtr.Zero;
-                    PythonEngine.ReleaseLock(gs);
-                }
-                disposed = true;
+                return;
             }
+
+            if (Runtime.Py_IsInitialized() == 0)
+                throw new InvalidOperationException("Python runtime must be initialized");
+
+            if (!Runtime.IsFinalizing)
+            {
+                long refcount = Runtime.Refcount(this.obj);
+                Debug.Assert(refcount > 0, "Object refcount is 0 or less");
+
+                if (refcount == 1)
+                {
+                    Runtime.PyErr_Fetch(out var errType, out var errVal, out var traceback);
+
+                    try
+                    {
+                        Runtime.XDecref(this.obj);
+                        Runtime.CheckExceptionOccurred();
+                    }
+                    finally
+                    {
+                        // Python requires finalizers to preserve exception:
+                        // https://docs.python.org/3/extending/newtypes.html#finalization-and-de-allocation
+                        Runtime.PyErr_Restore(errType, errVal, traceback);
+                    }
+                }
+                else
+                {
+                    Runtime.XDecref(this.obj);
+                }
+            }
+            this.obj = IntPtr.Zero;
         }
 
         public void Dispose()
@@ -209,6 +239,8 @@ namespace Python.Runtime
         /// </remarks>
         public bool TypeCheck(PyObject typeOrClass)
         {
+            if (typeOrClass == null) throw new ArgumentNullException(nameof(typeOrClass));
+
             return Runtime.PyObject_TypeCheck(obj, typeOrClass.obj);
         }
 
@@ -221,6 +253,8 @@ namespace Python.Runtime
         /// </remarks>
         public bool HasAttr(string name)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             return Runtime.PyObject_HasAttrString(obj, name) != 0;
         }
 
@@ -234,6 +268,8 @@ namespace Python.Runtime
         /// </remarks>
         public bool HasAttr(PyObject name)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             return Runtime.PyObject_HasAttr(obj, name.obj) != 0;
         }
 
@@ -247,6 +283,8 @@ namespace Python.Runtime
         /// </remarks>
         public PyObject GetAttr(string name)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             IntPtr op = Runtime.PyObject_GetAttrString(obj, name);
             if (op == IntPtr.Zero)
             {
@@ -257,7 +295,7 @@ namespace Python.Runtime
 
 
         /// <summary>
-        /// GetAttr Method
+        /// GetAttr Method. Returns fallback value if getting attribute fails for any reason.
         /// </summary>
         /// <remarks>
         /// Returns the named attribute of the Python object, or the given
@@ -265,6 +303,8 @@ namespace Python.Runtime
         /// </remarks>
         public PyObject GetAttr(string name, PyObject _default)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             IntPtr op = Runtime.PyObject_GetAttrString(obj, name);
             if (op == IntPtr.Zero)
             {
@@ -285,6 +325,8 @@ namespace Python.Runtime
         /// </remarks>
         public PyObject GetAttr(PyObject name)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             IntPtr op = Runtime.PyObject_GetAttr(obj, name.obj);
             if (op == IntPtr.Zero)
             {
@@ -304,6 +346,8 @@ namespace Python.Runtime
         /// </remarks>
         public PyObject GetAttr(PyObject name, PyObject _default)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             IntPtr op = Runtime.PyObject_GetAttr(obj, name.obj);
             if (op == IntPtr.Zero)
             {
@@ -323,6 +367,9 @@ namespace Python.Runtime
         /// </remarks>
         public void SetAttr(string name, PyObject value)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (value == null) throw new ArgumentNullException(nameof(value));
+
             int r = Runtime.PyObject_SetAttrString(obj, name, value.obj);
             if (r < 0)
             {
@@ -341,6 +388,9 @@ namespace Python.Runtime
         /// </remarks>
         public void SetAttr(PyObject name, PyObject value)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (value == null) throw new ArgumentNullException(nameof(value));
+
             int r = Runtime.PyObject_SetAttr(obj, name.obj, value.obj);
             if (r < 0)
             {
@@ -358,6 +408,8 @@ namespace Python.Runtime
         /// </remarks>
         public void DelAttr(string name)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             int r = Runtime.PyObject_SetAttrString(obj, name, IntPtr.Zero);
             if (r < 0)
             {
@@ -376,6 +428,8 @@ namespace Python.Runtime
         /// </remarks>
         public void DelAttr(PyObject name)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+
             int r = Runtime.PyObject_SetAttr(obj, name.obj, IntPtr.Zero);
             if (r < 0)
             {
@@ -394,6 +448,8 @@ namespace Python.Runtime
         /// </remarks>
         public virtual PyObject GetItem(PyObject key)
         {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
             IntPtr op = Runtime.PyObject_GetItem(obj, key.obj);
             if (op == IntPtr.Zero)
             {
@@ -413,6 +469,8 @@ namespace Python.Runtime
         /// </remarks>
         public virtual PyObject GetItem(string key)
         {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
             using (var pyKey = new PyString(key))
             {
                 return GetItem(pyKey);
@@ -447,6 +505,9 @@ namespace Python.Runtime
         /// </remarks>
         public virtual void SetItem(PyObject key, PyObject value)
         {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+            if (value == null) throw new ArgumentNullException(nameof(value));
+
             int r = Runtime.PyObject_SetItem(obj, key.obj, value.obj);
             if (r < 0)
             {
@@ -465,6 +526,9 @@ namespace Python.Runtime
         /// </remarks>
         public virtual void SetItem(string key, PyObject value)
         {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+            if (value == null) throw new ArgumentNullException(nameof(value));
+
             using (var pyKey = new PyString(key))
             {
                 SetItem(pyKey, value);
@@ -482,6 +546,8 @@ namespace Python.Runtime
         /// </remarks>
         public virtual void SetItem(int index, PyObject value)
         {
+            if (value == null) throw new ArgumentNullException(nameof(value));
+
             using (var pyindex = new PyInt(index))
             {
                 SetItem(pyindex, value);
@@ -499,6 +565,8 @@ namespace Python.Runtime
         /// </remarks>
         public virtual void DelItem(PyObject key)
         {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
             int r = Runtime.PyObject_DelItem(obj, key.obj);
             if (r < 0)
             {
@@ -517,6 +585,8 @@ namespace Python.Runtime
         /// </remarks>
         public virtual void DelItem(string key)
         {
+            if (key == null) throw new ArgumentNullException(nameof(key));
+
             using (var pyKey = new PyString(key))
             {
                 DelItem(pyKey);
@@ -630,7 +700,7 @@ namespace Python.Runtime
         /// </remarks>
         public IEnumerator GetEnumerator()
         {
-            return new PyIter(this);
+            return PyIter.GetIter(this);
         }
 
 
@@ -639,10 +709,13 @@ namespace Python.Runtime
         /// </summary>
         /// <remarks>
         /// Invoke the callable object with the given arguments, passed as a
-        /// PyObject[]. A PythonException is raised if the invokation fails.
+        /// PyObject[]. A PythonException is raised if the invocation fails.
         /// </remarks>
         public PyObject Invoke(params PyObject[] args)
         {
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (args.Contains(null)) throw new ArgumentNullException();
+
             var t = new PyTuple(args);
             IntPtr r = Runtime.PyObject_Call(obj, t.obj, IntPtr.Zero);
             t.Dispose();
@@ -659,10 +732,12 @@ namespace Python.Runtime
         /// </summary>
         /// <remarks>
         /// Invoke the callable object with the given arguments, passed as a
-        /// Python tuple. A PythonException is raised if the invokation fails.
+        /// Python tuple. A PythonException is raised if the invocation fails.
         /// </remarks>
         public PyObject Invoke(PyTuple args)
         {
+            if (args == null) throw new ArgumentNullException(nameof(args));
+
             IntPtr r = Runtime.PyObject_Call(obj, args.obj, IntPtr.Zero);
             if (r == IntPtr.Zero)
             {
@@ -677,12 +752,15 @@ namespace Python.Runtime
         /// </summary>
         /// <remarks>
         /// Invoke the callable object with the given positional and keyword
-        /// arguments. A PythonException is raised if the invokation fails.
+        /// arguments. A PythonException is raised if the invocation fails.
         /// </remarks>
         public PyObject Invoke(PyObject[] args, PyDict kw)
         {
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (args.Contains(null)) throw new ArgumentNullException();
+
             var t = new PyTuple(args);
-            IntPtr r = Runtime.PyObject_Call(obj, t.obj, kw != null ? kw.obj : IntPtr.Zero);
+            IntPtr r = Runtime.PyObject_Call(obj, t.obj, kw?.obj ?? IntPtr.Zero);
             t.Dispose();
             if (r == IntPtr.Zero)
             {
@@ -697,11 +775,13 @@ namespace Python.Runtime
         /// </summary>
         /// <remarks>
         /// Invoke the callable object with the given positional and keyword
-        /// arguments. A PythonException is raised if the invokation fails.
+        /// arguments. A PythonException is raised if the invocation fails.
         /// </remarks>
         public PyObject Invoke(PyTuple args, PyDict kw)
         {
-            IntPtr r = Runtime.PyObject_Call(obj, args.obj, kw != null ? kw.obj : IntPtr.Zero);
+            if (args == null) throw new ArgumentNullException(nameof(args));
+
+            IntPtr r = Runtime.PyObject_Call(obj, args.obj, kw?.obj ?? IntPtr.Zero);
             if (r == IntPtr.Zero)
             {
                 throw new PythonException();
@@ -715,10 +795,14 @@ namespace Python.Runtime
         /// </summary>
         /// <remarks>
         /// Invoke the named method of the object with the given arguments.
-        /// A PythonException is raised if the invokation is unsuccessful.
+        /// A PythonException is raised if the invocation is unsuccessful.
         /// </remarks>
         public PyObject InvokeMethod(string name, params PyObject[] args)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (args.Contains(null)) throw new ArgumentNullException();
+
             PyObject method = GetAttr(name);
             PyObject result = method.Invoke(args);
             method.Dispose();
@@ -731,10 +815,51 @@ namespace Python.Runtime
         /// </summary>
         /// <remarks>
         /// Invoke the named method of the object with the given arguments.
-        /// A PythonException is raised if the invokation is unsuccessful.
+        /// A PythonException is raised if the invocation is unsuccessful.
         /// </remarks>
         public PyObject InvokeMethod(string name, PyTuple args)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (args == null) throw new ArgumentNullException(nameof(args));
+
+            PyObject method = GetAttr(name);
+            PyObject result = method.Invoke(args);
+            method.Dispose();
+            return result;
+        }
+
+        /// <summary>
+        /// InvokeMethod Method
+        /// </summary>
+        /// <remarks>
+        /// Invoke the named method of the object with the given arguments.
+        /// A PythonException is raised if the invocation is unsuccessful.
+        /// </remarks>
+        public PyObject InvokeMethod(PyObject name, params PyObject[] args)
+        {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (args.Contains(null)) throw new ArgumentNullException();
+
+            PyObject method = GetAttr(name);
+            PyObject result = method.Invoke(args);
+            method.Dispose();
+            return result;
+        }
+
+
+        /// <summary>
+        /// InvokeMethod Method
+        /// </summary>
+        /// <remarks>
+        /// Invoke the named method of the object with the given arguments.
+        /// A PythonException is raised if the invocation is unsuccessful.
+        /// </remarks>
+        public PyObject InvokeMethod(PyObject name, PyTuple args)
+        {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (args == null) throw new ArgumentNullException(nameof(args));
+
             PyObject method = GetAttr(name);
             PyObject result = method.Invoke(args);
             method.Dispose();
@@ -748,10 +873,14 @@ namespace Python.Runtime
         /// <remarks>
         /// Invoke the named method of the object with the given arguments
         /// and keyword arguments. Keyword args are passed as a PyDict object.
-        /// A PythonException is raised if the invokation is unsuccessful.
+        /// A PythonException is raised if the invocation is unsuccessful.
         /// </remarks>
         public PyObject InvokeMethod(string name, PyObject[] args, PyDict kw)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (args == null) throw new ArgumentNullException(nameof(args));
+            if (args.Contains(null)) throw new ArgumentNullException();
+
             PyObject method = GetAttr(name);
             PyObject result = method.Invoke(args, kw);
             method.Dispose();
@@ -765,10 +894,13 @@ namespace Python.Runtime
         /// <remarks>
         /// Invoke the named method of the object with the given arguments
         /// and keyword arguments. Keyword args are passed as a PyDict object.
-        /// A PythonException is raised if the invokation is unsuccessful.
+        /// A PythonException is raised if the invocation is unsuccessful.
         /// </remarks>
         public PyObject InvokeMethod(string name, PyTuple args, PyDict kw)
         {
+            if (name == null) throw new ArgumentNullException(nameof(name));
+            if (args == null) throw new ArgumentNullException(nameof(args));
+
             PyObject method = GetAttr(name);
             PyObject result = method.Invoke(args, kw);
             method.Dispose();
@@ -785,6 +917,8 @@ namespace Python.Runtime
         /// </remarks>
         public bool IsInstance(PyObject typeOrClass)
         {
+            if (typeOrClass == null) throw new ArgumentNullException(nameof(typeOrClass));
+
             int r = Runtime.PyObject_IsInstance(obj, typeOrClass.obj);
             if (r < 0)
             {
@@ -804,6 +938,8 @@ namespace Python.Runtime
         /// </remarks>
         public bool IsSubclass(PyObject typeOrClass)
         {
+            if (typeOrClass == null) throw new ArgumentNullException(nameof(typeOrClass));
+
             int r = Runtime.PyObject_IsSubclass(obj, typeOrClass.obj);
             if (r < 0)
             {
@@ -852,6 +988,10 @@ namespace Python.Runtime
             return Runtime.PyObject_IsTrue(obj) != 0;
         }
 
+        /// <summary>
+        /// Return true if the object is None
+        /// </summary>
+        public bool IsNone() => CheckNone(this) == null;
 
         /// <summary>
         /// Dir Method
@@ -940,6 +1080,19 @@ namespace Python.Runtime
         public override int GetHashCode()
         {
             return ((ulong)Runtime.PyObject_Hash(obj)).GetHashCode();
+        }
+
+        /// <summary>
+        /// GetBuffer Method. This Method only works for objects that have a buffer (like "bytes", "bytearray" or "array.array")
+        /// </summary>
+        /// <remarks>
+        /// Send a request to the PyObject to fill in view as specified by flags. If the PyObject cannot provide a buffer of the exact type, it MUST raise PyExc_BufferError, set view->obj to NULL and return -1.
+        /// On success, fill in view, set view->obj to a new reference to exporter and return 0. In the case of chained buffer providers that redirect requests to a single object, view->obj MAY refer to this object instead of exporter(See Buffer Object Structures).
+        /// Successful calls to <see cref="PyObject.GetBuffer"/> must be paired with calls to <see cref="PyBuffer.Dispose()"/>, similar to malloc() and free(). Thus, after the consumer is done with the buffer, <see cref="PyBuffer.Dispose()"/> must be called exactly once.
+        /// </remarks>
+        public PyBuffer GetBuffer(PyBUF flags = PyBUF.SIMPLE)
+        {
+            return new PyBuffer(this, flags);
         }
 
 
