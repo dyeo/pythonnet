@@ -23,6 +23,10 @@ namespace Python.Runtime
         public static IntPtr tp_new(IntPtr tp, IntPtr args, IntPtr kw)
         {
             var self = GetManagedObject(tp) as ArrayObject;
+            if (!self.type.Valid)
+            {
+                return Exceptions.RaiseTypeError(self.type.DeletedMessage);
+            }
             if (Runtime.PyTuple_Size(args) != 1)
             {
                 return Exceptions.RaiseTypeError("array expects 1 argument");
