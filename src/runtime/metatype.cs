@@ -308,7 +308,7 @@ namespace Python.Runtime
         {
             var cb = GetManagedObject(tp) as ClassBase;
 
-            if (cb == null)
+            if (cb == null || !cb.type.Valid)
             {
                 Runtime.XIncref(Runtime.PyFalse);
                 return Runtime.PyFalse;
@@ -340,13 +340,13 @@ namespace Python.Runtime
                 }
 
                 var otherCb = GetManagedObject(otherType.Handle) as ClassBase;
-                if (otherCb == null)
+                if (otherCb == null || !otherCb.type.Valid)
                 {
                     Runtime.XIncref(Runtime.PyFalse);
                     return Runtime.PyFalse;
                 }
 
-                return Converter.ToPython(cb.type.Value.IsAssignableFrom(otherCb.type));
+                return Converter.ToPython(cb.type.Value.IsAssignableFrom(otherCb.type.Value));
             }
         }
 
