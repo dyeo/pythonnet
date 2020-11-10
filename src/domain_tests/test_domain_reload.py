@@ -20,3 +20,6 @@ def test_rename_class_member_static_function():
 
 def test_rename_class_member_function():
     _run_test('member_rename')
+
+def test_rename_class_member_field():
+    _run_test('field_rename')

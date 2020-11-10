@@ -203,6 +203,46 @@ def after_reload():
         raise AssertionError('Failed to throw exception: expected TypeError calling unbound .NET function that no longer exists')
                     ",
             },
+            new TestCase
+            {
+                Name = "field_rename",
+                DotNetBefore = @"
+                    namespace TestNamespace
+                    {
+                        [System.Serializable]
+                        public class Cls 
+                        {
+                            static public int Before = 2;
+                        }
+                    }",
+                DotNetAfter = @"
+                    namespace TestNamespace
+                    {
+                        [System.Serializable]
+                        public class Cls
+                        {
+                            static public int After = 4;
+                        }
+                    }",
+                PythonCode = @"
+import clr
+import sys
+clr.AddReference('DomainTests')
+from TestNamespace import Cls
+
+def before_reload():
+    sys.my_int = Cls.Before
+
+def after_reload():
+    print(sys.my_int)
+    try:
+        assert 2 == Cls.Before
+    except AttributeError:
+        print('Caught expected exception')
+    else:
+        raise AssertionError('Failed to throw exception')
+",
+            },
         };
 
         /// <summary>
