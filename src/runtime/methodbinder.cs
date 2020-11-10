@@ -185,6 +185,11 @@ namespace Python.Runtime
         /// </remarks>
         internal static int GetPrecedence(MethodBase mi)
         {
+            if (mi == null)
+            {
+                return -1;
+            }
+
             ParameterInfo[] pi = mi.GetParameters();
             int val = mi.IsStatic ? 3000 : 0;
             int num = pi.Length;
@@ -314,16 +319,6 @@ namespace Python.Runtime
             else
             {
                 _methods = GetMethods();
-                if (_methods.Length == 0)
-                {
-                    var msg = new StringBuilder("The underlying C# method(s) have been deleted");
-                    if (list.Count > 0 && list[0].Name != null)
-                    {
-                        msg.Append($": {list[0].ToString()}");
-                    }
-                    Exceptions.RaiseTypeError(msg.ToString());
-                    return null;
-                }
             }
 
             // TODO: Clean up
@@ -686,17 +681,23 @@ namespace Python.Runtime
 
         internal virtual IntPtr Invoke(IntPtr inst, IntPtr args, IntPtr kw, MethodBase info, MethodInfo[] methodinfo)
         {
+            // No valid methods, nothing to bind.
+            if (GetMethods().Length == 0)
+            {
+                var msg = new StringBuilder("The underlying C# method(s) have been deleted");
+                if (list.Count > 0 && list[0].Name != null)
+                {
+                    msg.Append($": {list[0].ToString()}");
+                }
+                return Exceptions.RaiseTypeError(msg.ToString());;
+            }
+
             Binding binding = Bind(inst, args, kw, info, methodinfo);
             object result;
             IntPtr ts = IntPtr.Zero;
 
             if (binding == null)
             {
-                if (Exceptions.ErrorOccurred())
-                {
-                    // Bind has set an exception, bail out.
-                    return IntPtr.Zero;
-                }
                 var value = new StringBuilder("No method matches given arguments");
                 if (methodinfo != null && methodinfo.Length > 0)
                 {
@@ -794,8 +795,8 @@ namespace Python.Runtime
     {
         int IComparer<MaybeMethodBase>.Compare(MaybeMethodBase m1, MaybeMethodBase m2)
         {
-            MethodBase me1 = m1;
-            MethodBase me2 = m2;
+            MethodBase me1 = m1.Valid ? m1.Value : null;
+            MethodBase me2 = m2.Valid ? m2.Value : null;
             if (me1.DeclaringType != me2.DeclaringType)
             {
                 // m2's type derives from m1's type, favor m2
@@ -807,8 +808,8 @@ namespace Python.Runtime
                     return -1;
             }
 
-            int p1 = MethodBinder.GetPrecedence((MethodBase)m1);
-            int p2 = MethodBinder.GetPrecedence((MethodBase)m2);
+            int p1 = MethodBinder.GetPrecedence(me1);
+            int p2 = MethodBinder.GetPrecedence(me2);
             if (p1 < p2)
             {
                 return -1;

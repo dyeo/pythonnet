@@ -242,6 +242,7 @@ namespace Python.Runtime
             m_name = (string)info.GetValue("n", typeof(string));
             m_type = Type.GetType(m_name, throwOnError:false);
         }
+
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
             info.AddValue("n", m_name);
@@ -251,7 +252,6 @@ namespace Python.Runtime
     [Serializable]
     internal struct MaybeMethod<T> : ISerializable where T: MethodBase//, MethodInfo, ConstructorInfo
     {
-        public static implicit operator T (MaybeMethod<T> self) => (T)self.Value;
 
         public static implicit operator MaybeMethod<T> (MethodBase ob) => new MaybeMethod<T>((T)ob);
 
@@ -295,22 +295,22 @@ namespace Python.Runtime
             m_info = null;
             try
             {
-                var tp = Type.GetType(info.GetString("t"), throwOnError:false);
-                if (tp != null)
+                // Retrive the reflected type of the method;
+                var tp = Type.GetType(info.GetString("t"));
+                // Get the method's parameters types
+                var field_name = info.GetString("f");
+                var param = (string[])info.GetValue("p", typeof(string[]));
+                Type[] types = new Type[param.Length];
+                for (int i = 0; i < param.Length; i++)
                 {
-                    var field_name = info.GetString("f");
-                    var param = (string[])info.GetValue("p", typeof(string[]));
-                    Type[] types = new Type[param.Length];
-                    
-                        for (int i = 0; i < param.Length; i++)
-                        {
-                            types[i] = Type.GetType(param[i]);
-                        }
-                        m_info = tp.GetMethod(field_name, k_flags, binder:null, types:types, modifiers:null);
-                        if (m_info == null && m_name.Contains(".ctor"))
-                        {
-                            m_info = tp.GetConstructor(k_flags, binder:null, types:types, modifiers:null);
-                        }
+                    types[i] = Type.GetType(param[i]);
+                }
+                // Try to get the method
+                m_info = tp.GetMethod(field_name, k_flags, binder:null, types:types, modifiers:null);
+                // Try again, may be a constructor
+                if (m_info == null && m_name.Contains(".ctor"))
+                {
+                    m_info = tp.GetConstructor(k_flags, binder:null, types:types, modifiers:null);
                 }
             }
             catch
