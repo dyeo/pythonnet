@@ -92,6 +92,10 @@ namespace Python.Runtime
         public static IntPtr mp_subscript(IntPtr op, IntPtr key)
         {
             var self = (ConstructorBinding)GetManagedObject(op);
+            if (!self.type.Valid)
+            {
+                return Exceptions.RaiseTypeError(self.type.DeletedMessage);
+            }
 
             Type[] types = Runtime.PythonArgsToTypeArray(key);
             if (types == null)

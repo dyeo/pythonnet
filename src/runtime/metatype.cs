@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Runtime.Serialization;
 
 namespace Python.Runtime
 {
@@ -103,9 +104,16 @@ namespace Python.Runtime
             var cb = GetManagedObject(base_type) as ClassBase;
             if (cb != null)
             {
-                if (!cb.CanSubclass())
+                try
                 {
-                    return Exceptions.RaiseTypeError("delegates, enums and array types cannot be subclassed");
+                    if (!cb.CanSubclass())
+                    {
+                        return Exceptions.RaiseTypeError("delegates, enums and array types cannot be subclassed");
+                    }
+                }
+                catch (SerializationException)
+                {
+                    return Exceptions.RaiseTypeError($"Underlying C# Base class {cb.type} has been deleted");
                 }
             }
 

@@ -202,19 +202,24 @@ namespace Python.Runtime
     [Serializable]
     internal struct MaybeType : ISerializable
     {
-        public static implicit operator Type (MaybeType self) => self.Value;
-
         public static implicit operator MaybeType (Type ob) => new MaybeType(ob);
 
         string m_name;
         Type m_type;
+        public string DeletedMessage
+        {
+            get
+            {
+                return $"The .NET Type {m_name} no longer exists";
+            }
+        }
         public Type Value
         {
             get
             {
                 if (m_type == null)
                 {
-                    throw new SerializationException($"The .NET Type {m_name} no longer exists");
+                    throw new SerializationException(DeletedMessage);
                 }
                 return m_type;
             }

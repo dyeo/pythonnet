@@ -165,7 +165,7 @@ namespace Python.Runtime
                     if (inst?.inst is IPythonDerivedType)
                     {
                         var baseType = GetManagedObject(self.targetType) as ClassBase;
-                        if (baseType != null)
+                        if (baseType != null && baseType.type.Valid)
                         {
                             string baseMethodName = "_" + baseType.type.Value.Name + "__" + self.m.name;
                             IntPtr baseMethod = Runtime.PyObject_GetAttrString(target, baseMethodName);

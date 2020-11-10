@@ -51,6 +51,10 @@ namespace Python.Runtime
         /// </remarks>
         internal object InvokeRaw(IntPtr inst, IntPtr args, IntPtr kw, MethodBase info)
         {
+            if (!_containingType.Valid)
+            {
+                return Exceptions.RaiseTypeError(_containingType.DeletedMessage);
+            }
             object result;
 
             if (_containingType.Value.IsValueType && !_containingType.Value.IsPrimitive &&
@@ -95,6 +99,11 @@ namespace Python.Runtime
 
                 if (binding == null)
                 {
+                    // Bind has set an Exception.
+                    if (Exceptions.ErrorOccurred())
+                    {
+                        return null;
+                    }
                     var errorMessage = new StringBuilder("No constructor matches given arguments");
                     if (info != null && info.IsConstructor && info.DeclaringType != null)
                     {

@@ -44,7 +44,12 @@ namespace Python.Runtime
                 return Exceptions.RaiseTypeError("type(s) expected");
             }
 
-            Type target = GenericUtil.GenericForType(type, types.Length);
+            if (!type.Valid)
+            {
+                return Exceptions.RaiseTypeError(type.DeletedMessage);
+            }
+
+            Type target = GenericUtil.GenericForType(type.Value, types.Length);
 
             if (target != null)
             {

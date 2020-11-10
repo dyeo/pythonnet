@@ -19,7 +19,7 @@ namespace Python.Runtime
         {
             var _ctors = type.Value.GetConstructors();
             ctors_len = _ctors.Length;
-            binder = new ConstructorBinder(type);
+            binder = new ConstructorBinder(type.Value);
             foreach (ConstructorInfo t in _ctors)
             {
                 binder.AddMethod(t);
@@ -61,7 +61,11 @@ namespace Python.Runtime
                 return Exceptions.RaiseTypeError("invalid object");
             }
 
-            Type type = self.type;
+            if (!self.type.Valid)
+            {
+                return Exceptions.RaiseTypeError("**deleted");
+            }
+            Type type = self.type.Value;
 
             // Primitive types do not have constructors, but they look like
             // they do from Python. If the ClassObject represents one of the
@@ -114,9 +118,14 @@ namespace Python.Runtime
         /// </summary>
         public override IntPtr type_subscript(IntPtr idx)
         {
+            if (!type.Valid)
+            {
+                return Exceptions.RaiseTypeError("**deleted");
+            }
+
             // If this type is the Array type, the [<type>] means we need to
             // construct and return an array type of the given element type.
-            if (type == typeof(Array))
+            if (type.Value == typeof(Array))
             {
                 if (Runtime.PyTuple_Check(idx))
                 {

@@ -113,7 +113,7 @@ namespace Python.Runtime
                     continue;
                 }
                 // re-init the class; pick-up possible new members after a domain reload.
-                InitClassBase(pair.Key, pair.Value);
+                InitClassBase(pair.Key.Value, pair.Value);
                 cache.Add(pair.Key, pair.Value);
                 var context = contexts[pair.Value.pyHandle];
                 pair.Value.Load(context);
