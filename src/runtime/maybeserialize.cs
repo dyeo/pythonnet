@@ -60,7 +60,7 @@ namespace Python.Runtime
     internal struct MaybeMethod<T> : ISerializable where T: MethodBase//, MethodInfo, ConstructorInfo
     {
 
-        public static implicit operator MaybeMethod<T> (MethodBase ob) => new MaybeMethod<T>((T)ob);
+        public static implicit operator MaybeMethod<T> (T ob) => new MaybeMethod<T>(ob);
 
         string m_name;
         MethodBase m_info;
@@ -144,15 +144,15 @@ namespace Python.Runtime
     }
 
      [Serializable]
-    internal struct MaybeFieldInfo : ISerializable
+    internal struct MaybeMemberInfo<T> : ISerializable where T: MemberInfo
     {
-        public static implicit operator MaybeFieldInfo (FieldInfo ob) => new MaybeFieldInfo(ob);
+        public static implicit operator MaybeMemberInfo<T> (T ob) => new MaybeMemberInfo<T>(ob);
 
         string m_name;
-        FieldInfo m_info;
+        MemberInfo m_info;
         
         // As seen in ClassManager.GetClassInfo
-        const BindingFlags m_flags = BindingFlags.Static |
+        const BindingFlags k_flags = BindingFlags.Static |
                         BindingFlags.Instance |
                         BindingFlags.Public |
                         BindingFlags.NonPublic;
@@ -161,11 +161,11 @@ namespace Python.Runtime
         {
             get
             {
-                return $"The .NET Field info {m_name} no longer exists";
+                return $"The .NET {typeof(T)} {m_name} no longer exists";
             }
         }
 
-        public FieldInfo Value
+        public T Value
         {
             get
             {
@@ -173,7 +173,7 @@ namespace Python.Runtime
                 {
                     throw new SerializationException(DeletedMessage);
                 }
-                return m_info;
+                return (T)m_info;
             }
         }
 
@@ -185,13 +185,13 @@ namespace Python.Runtime
         public string Name {get{return m_name;}}
         public bool Valid => m_info != null;
 
-        public MaybeFieldInfo(FieldInfo fi)
+        public MaybeMemberInfo(T fi)
         {
             m_info = fi;
-            m_name = m_info.ToString();
+            m_name = m_info?.ToString();
         }
 
-        internal MaybeFieldInfo(SerializationInfo info, StreamingContext context)
+        internal MaybeMemberInfo(SerializationInfo info, StreamingContext context)
         {
             m_name = info.GetString("s");
             m_info = null;
@@ -201,13 +201,14 @@ namespace Python.Runtime
                 if (tp != null)
                 {
                     var field_name = info.GetString("f");
-                    m_info = tp.GetField(field_name, m_flags);
+                    m_info = tp.GetField(field_name, k_flags);
                 }
             }
             catch 
             {
             }
         }
+
         public void GetObjectData(SerializationInfo info, StreamingContext context)
         {
             info.AddValue("s", m_name);

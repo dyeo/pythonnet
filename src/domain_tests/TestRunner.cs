@@ -243,6 +243,46 @@ def after_reload():
         raise AssertionError('Failed to throw exception')
 ",
             },
+            new TestCase
+            {
+                Name = "property_rename",
+                DotNetBefore = @"
+                    namespace TestNamespace
+                    {
+                        [System.Serializable]
+                        public class Cls 
+                        {
+                            static public int Before { get { return 2; } }
+                        }
+                    }",
+                DotNetAfter = @"
+                    namespace TestNamespace
+                    {
+                        [System.Serializable]
+                        public class Cls
+                        {
+                            static public int After { get { return 4; } }
+                        }
+                    }",
+                PythonCode = @"
+import clr
+import sys
+clr.AddReference('DomainTests')
+from TestNamespace import Cls
+
+def before_reload():
+    sys.my_int = Cls.Before
+
+def after_reload():
+    print(sys.my_int)
+    try:
+        assert 2 == Cls.Before
+    except TypeError:
+        print('Caught expected exception')
+    else:
+        raise AssertionError('Failed to throw exception')
+",
+            },
         };
 
         /// <summary>
