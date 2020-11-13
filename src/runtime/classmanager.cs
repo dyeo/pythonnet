@@ -110,6 +110,7 @@ namespace Python.Runtime
             {
                 if (!pair.Key.Valid)
                 {
+                    Runtime.XDecref(pair.Value.pyHandle);
                     continue;
                 }
                 // re-init the class; pick-up possible new members after a domain reload.

@@ -89,6 +89,7 @@ namespace Python.Runtime
                 }
                 catch
                 {
+                    Runtime.XDecref(entry.Value);
                     continue;
                 }
                 IntPtr handle = entry.Value;
