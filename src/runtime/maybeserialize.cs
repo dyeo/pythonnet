@@ -68,8 +68,7 @@ namespace Python.Runtime
         // As seen in ClassManager.GetClassInfo
         const BindingFlags k_flags = BindingFlags.Static |
                         BindingFlags.Instance |
-                        BindingFlags.Public |
-                        BindingFlags.NonPublic;
+                        BindingFlags.Public ;
         public T Value
         {
             get
@@ -154,8 +153,7 @@ namespace Python.Runtime
         // As seen in ClassManager.GetClassInfo
         const BindingFlags k_flags = BindingFlags.Static |
                         BindingFlags.Instance |
-                        BindingFlags.Public |
-                        BindingFlags.NonPublic;
+                        BindingFlags.Public ;
 
         public string DeletedMessage 
         {
