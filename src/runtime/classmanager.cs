@@ -97,6 +97,19 @@ namespace Python.Runtime
                 Runtime.XIncref(cls.Value.pyHandle);
                 var context = contexts[cls.Value.pyHandle] = new InterDomainContext();
                 cls.Value.Save(context);
+                // Remove all members added in InitBaseClass.
+                // this is done so that if domain reloads and a member of a
+                // reflected dotnet class is removed, it is removed from the
+                // Python object's dictionary tool; thus raising an AttributeError
+                // instead of a TypeError.
+                // Classes are re-initialized on in RestoreRuntimeData.
+                // Console.WriteLine($"processing class {cls.Key.Value}");
+                foreach (var member in cls.Value.dotNetMembers)
+                {
+                    // Console.WriteLine($"removing donet member {cls.Key.Value}::{member}");
+                    IntPtr dict = Marshal.ReadIntPtr(cls.Value.tpHandle, TypeOffset.tp_dict);
+                    Runtime.PyDict_DelItemString(dict, member);
+                }
             }
         }
 
@@ -223,11 +236,16 @@ namespace Python.Runtime
             IntPtr dict = Marshal.ReadIntPtr(tp, TypeOffset.tp_dict);
 
 
+            if (impl.dotNetMembers == null)
+            {
+                impl.dotNetMembers = new List<string>();
+            }
             IDictionaryEnumerator iter = info.members.GetEnumerator();
             while (iter.MoveNext())
             {
                 var item = (ManagedType)iter.Value;
                 var name = (string)iter.Key;
+                impl.dotNetMembers.Add(name);
                 Runtime.PyDict_SetItemString(dict, name, item.pyHandle);
                 // Decref the item now that it's been used.
                 item.DecrRefCount();

@@ -18,11 +18,14 @@ namespace Python.Runtime
     [Serializable]
     internal class ClassBase : ManagedType
     {
+        [NonSerialized]
+        internal List<string> dotNetMembers;
         internal Indexer indexer;
         internal MaybeType type;
 
         internal ClassBase(Type tp)
         {
+            dotNetMembers = new List<string>();
             indexer = null;
             type = tp;
         }

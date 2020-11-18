@@ -86,14 +86,17 @@ namespace Python.DomainReloadTests
 import clr
 import sys
 clr.AddReference('DomainTests')
-from TestNamespace import Before
+import TestNamespace
 
 def before_reload():
-    sys.my_cls = Before
+    sys.my_cls = TestNamespace.Before
 
 def after_reload():
+    bar = sys.my_cls()
+    print(bar)
+    
     try:
-        sys.my_cls.Member()
+        foo = TestNamespace.Before
     except AttributeError:
         print('Caught expected exception')
     else:
@@ -137,13 +140,15 @@ def after_reload():
     try:
         # We should have reloaded the class. The old function still exists, but is now invalid.
         sys.my_cls.Before()
-    except TypeError:
+    except AttributeError:
         print('Caught expected TypeError')
     else:
         raise AssertionError('Failed to throw exception: expected TypeError calling class member that no longer exists')
 
+    assert sys.my_fn is not None
+
     try:
-        # We should have failed to reload the function which no longer exists.
+        # Unbound functions still exist. They will error out when called though.
         sys.my_fn()
     except TypeError:
         print('Caught expected TypeError')
@@ -189,13 +194,15 @@ def after_reload():
     try:
         # We should have reloaded the class. The old function still exists, but is now invalid.
         sys.my_cls.Before()
-    except TypeError:
+    except AttributeError:
         print('Caught expected TypeError')
     else:
         raise AssertionError('Failed to throw exception: expected TypeError calling class member that no longer exists')
+    
+    assert sys.my_fn is not None
 
     try:
-        # We should have failed to reload the function which no longer exists.
+        # Unbound functions still exist. They will error out when called though.
         sys.my_fn()
     except TypeError:
         print('Caught expected TypeError')
@@ -203,6 +210,7 @@ def after_reload():
         raise AssertionError('Failed to throw exception: expected TypeError calling unbound .NET function that no longer exists')
                     ",
             },
+
             new TestCase
             {
                 Name = "field_rename",
@@ -277,7 +285,7 @@ def after_reload():
     print(sys.my_int)
     try:
         assert 2 == Cls.Before
-    except TypeError:
+    except AttributeError:
         print('Caught expected exception')
     else:
         raise AssertionError('Failed to throw exception')
@@ -480,7 +488,7 @@ def after_reload():
     assert 1 == Cls.Foo()
     try:
         assert 2 == Cls.Function()
-    except TypeError:
+    except AttributeError:
         print('Caught expected exception')
     else:
         raise AssertionError('Failed to throw exception')
@@ -531,7 +539,7 @@ def after_reload():
     assert 1 == Cls.Foo
     try:
         assert 2 == Cls.Property
-    except TypeError:
+    except AttributeError:
         print('Caught expected exception')
     else:
         raise AssertionError('Failed to throw exception')
