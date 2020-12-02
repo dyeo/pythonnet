@@ -171,6 +171,15 @@ namespace Python.Runtime
             Initialize(Enumerable.Empty<string>(), setSysArgv: setSysArgv, initSigs: initSigs, mode);
         }
 
+        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
+        {
+            if (!initialized)
+            {
+                InitializeLibrary();
+                Initialize2(args,setSysArgv, initSigs);
+            }
+        }
+
         /// <summary>
         /// Initialize Method
         /// </summary>
@@ -181,7 +190,7 @@ namespace Python.Runtime
         /// interpreter lock (GIL) to call this method.
         /// initSigs can be set to 1 to do default python signal configuration. This will override the way signals are handled by the application.
         /// </remarks>
-        public static void Initialize(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
+        public static void Initialize2(IEnumerable<string> args, bool setSysArgv = true, bool initSigs = false, ShutdownMode mode = ShutdownMode.Default)
         {
             if (initialized)
             {
