@@ -701,6 +701,15 @@ namespace Python.Runtime
                 paramsArray = true;
             }
 
+            if ((positionalArgumentCount == 0) && (parameters.Length > 0) && (paramsArray) && (defaultsNeeded == 0))
+            {
+                // HACK --  might break other things.
+                // Corner case: 
+                // method with no parameter that has an overload with at least 
+                // one parameter and params
+                match = false;
+            }
+
             return match;
         }
 
