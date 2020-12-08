@@ -51,6 +51,9 @@ namespace Python.Runtime
         private static T GetDelegate<T>(IntPtr fp) where T: Delegate
         {
             // Use Marshal.GetDelegateForFunctionPointer<> directly after upgrade the framework
+            // var d = Marshal.GetDelegateForFunctionPointer(fp, typeof(T));
+            // var _ = d.GetType();
+            // return (T)d;
             return (T)Marshal.GetDelegateForFunctionPointer(fp, typeof(T));
         }
     }

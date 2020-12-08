@@ -22,20 +22,25 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.5.0" />
-    <PackageReference Include="pythonnet" Version="2.3.0" GeneratePathProperty="true">
+    <!-- <PackageReference Include="pythonnet" Version="2.3.0" GeneratePathProperty="true">
       <IncludeAssets>compile</IncludeAssets>
-    </PackageReference>
+    </PackageReference> -->
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Python.Runtime.dll">
+      <HintPath>..\runtime\bin\Python.Runtime.dll</HintPath>
+    </Reference>
   </ItemGroup>
 
   <Target Name="GetRuntimeLibBuildOutput" BeforeTargets="Build">
-    <MSBuild Projects="..\runtime\Python.Runtime.15.csproj" Properties="PYTHONNET_PY3_VERSION=PYTHON38;Configuration=$(Configuration);TargetFramework=net40;Python3Version=PYTHON38;OutputPath=bin\for_perf\">
+    <MSBuild Projects="..\runtime\Python.Runtime.15.csproj" Properties="PYTHONNET_PY3_VERSION=PYTHON37;Configuration=$(Configuration);TargetFramework=net40;Python3Version=PYTHON37;OutputPath=bin\for_perf\">
       <Output TaskParameter="TargetOutputs" ItemName="NewPythonRuntime" />
     </MSBuild>
   </Target>
 
-  <Target Name="CopyBaseline" AfterTargets="Build">
+  <!--<Target Name="CopyBaseline" AfterTargets="Build">
     <Copy SourceFiles="$(Pkgpythonnet)\lib\net40\Python.Runtime.dll" DestinationFolder="$(OutDir)\baseline" />
-  </Target>
+  </Target>-->
 
   <Target Name="CopyNewBuild" AfterTargets="Build">
     <Copy SourceFiles="@(NewPythonRuntime)" DestinationFolder="$(OutDir)\new" />

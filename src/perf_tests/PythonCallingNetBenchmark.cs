@@ -19,7 +19,7 @@ namespace Python.PerformanceTests
                 locals.SetItem("a", new NetObject().ToPython());
                 PythonEngine.Exec($@"
 s = 0
-for i in range(50000):
+for i in range(500000):
   s += a.{nameof(NetObject.LongProperty)}
 ", locals: locals.Handle);
             }
@@ -32,7 +32,7 @@ for i in range(50000):
                 locals.SetItem("a", new NetObject().ToPython());
                 PythonEngine.Exec($@"
 s = 0
-for i in range(50000):
+for i in range(500000):
   a.{nameof(NetObject.LongProperty)} += i
 ", locals: locals.Handle);
             }
