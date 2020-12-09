@@ -150,6 +150,17 @@ namespace Python.Runtime
             return Runtime.PyRun_SimpleString(code);
         }
 
+        static bool libraryLoaded = false;
+        public static void InitializeLibrary(string library, string directory)
+        {
+            if (!libraryLoaded)
+            {
+                var _loader = Python.Runtime.Platform.LibraryLoader.Get(Python.Runtime.Platform.NativeCodePageHelper.OperatingSystem);
+                _loader.Load(library, directory);
+                libraryLoaded = true;
+            }
+        }
+
         public static void Initialize()
         {
             Initialize(setSysArgv: true);
