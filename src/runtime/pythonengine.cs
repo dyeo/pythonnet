@@ -355,7 +355,9 @@ namespace Python.Runtime
             AppDomain.CurrentDomain.DomainUnload -= OnDomainUnload;
 
             PyScopeManager.Global.Clear();
+            trace("before executing shutdown handlers");
             ExecuteShutdownHandlers();
+            trace("after executing shutdown handlers");
             // Remember to shut down the runtime.
             Runtime.Shutdown(mode);
             PyObjectConversions.Reset();

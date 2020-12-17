@@ -207,6 +207,7 @@ namespace Python.Runtime
             // Replacement for the builtin __import__. The original import
             // hook is saved as this.py_import. This version handles CLR
             // import and defers to the normal builtin for everything else.
+            Runtime.RaiseEvent();
 
             var num_args = Runtime.PyTuple_Size(args);
             if (num_args < 1)

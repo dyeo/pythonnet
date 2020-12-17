@@ -130,6 +130,16 @@ namespace Python.Runtime
             }
         }
 
+        public delegate void GetThreadHandleDelegate();
+        public static event GetThreadHandleDelegate GetThreadHandleEvent;
+
+        public static void RaiseEvent()
+        {
+            if(GetThreadHandleEvent != null)
+            {
+                GetThreadHandleEvent();
+            }
+        }
 
         /// <summary>
         /// Initialize the runtime...
