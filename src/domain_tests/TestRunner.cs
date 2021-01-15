@@ -1094,6 +1094,29 @@ def after_reload():
     
                     ",
             },
+            new TestCase
+            {
+                // The C# code for this test doesn't matter; we're testing
+                // that the import hook behaves properly after a domain reload
+                Name = "import_after_reload",
+                DotNetBefore = "",
+                DotNetAfter = "",
+                PythonCode = @"
+import sys
+
+def before_reload():
+    import clr
+    import System
+
+
+def after_reload():
+    assert 'System' in sys.modules
+    assert 'clr' in sys.modules
+    import clr
+    import System
+    
+                    ",
+            },
         };
 
         /// <summary>
