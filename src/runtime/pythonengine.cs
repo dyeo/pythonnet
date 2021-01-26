@@ -155,7 +155,7 @@ namespace Python.Runtime
         {
             if (!libraryLoaded)
             {
-                var _loader = Python.Runtime.Platform.LibraryLoader.Get(Python.Runtime.Platform.NativeCodePageHelper.OperatingSystem);
+                var _loader = Python.Runtime.Platform.LibraryLoader.Instance;
                 _loader.Load(library, directory);
                 libraryLoaded = true;
             }
