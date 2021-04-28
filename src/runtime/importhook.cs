@@ -1,3 +1,4 @@
+#define NEW
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -15,6 +16,33 @@ namespace Python.Runtime
         private static IntPtr py_clr_module;
         static BorrowedReference ClrModuleReference => new BorrowedReference(py_clr_module);
 
+        private const string LoaderCode = @"
+import importlib.abc
+import sys
+
+class DotNetLoader(importlib.abc.Loader):
+
+    @classmethod
+    def exec_module(klass, mod):
+        # This method needs to exist.
+        pass
+
+    @classmethod
+    def create_module(klass, spec):
+        import clr
+        return clr._load_clr_module(spec)
+
+class DotNetFinder(importlib.abc.MetaPathFinder):
+
+    @classmethod
+    def find_spec(klass, fullname, paths=None, target=None): 
+        import clr
+        if clr._available_namespaces and fullname in clr._available_namespaces:
+            return importlib.machinery.ModuleSpec(fullname, DotNetLoader(), is_package=True)
+        return None
+            ";
+        const string availableNsKey = "_available_namespaces";
+
         /// <summary>
         /// Initialize just the __import__ hook itself.
         /// </summary>
@@ -26,11 +54,11 @@ namespace Python.Runtime
             IntPtr builtins = Runtime.GetBuiltins();
             py_import = Runtime.PyObject_GetAttr(builtins, PyIdentifier.__import__);
             PythonException.ThrowIfIsNull(py_import);
-
+#if OLD
             hook = new MethodWrapper(typeof(ImportHook), "__import__", "TernaryFunc");
             int res = Runtime.PyObject_SetAttr(builtins, PyIdentifier.__import__, hook.ptr);
             PythonException.ThrowIfIsNotZero(res);
-
+#endif
             Runtime.XDecref(builtins);
         }
 
@@ -39,6 +67,7 @@ namespace Python.Runtime
         /// </summary>
         static void RestoreImport()
         {
+#if OLD
             IntPtr builtins = Runtime.GetBuiltins();
 
             IntPtr existing = Runtime.PyObject_GetAttr(builtins, PyIdentifier.__import__);
@@ -50,13 +79,15 @@ namespace Python.Runtime
 
             int res = Runtime.PyObject_SetAttr(builtins, PyIdentifier.__import__, py_import);
             PythonException.ThrowIfIsNotZero(res);
+#endif
             Runtime.XDecref(py_import);
             py_import = IntPtr.Zero;
-
+#if OLD
             hook.Release();
             hook = null;
 
             Runtime.XDecref(builtins);
+#endif
         }
 
         /// <summary>
@@ -80,6 +111,46 @@ namespace Python.Runtime
             BorrowedReference dict = Runtime.PyImport_GetModuleDict();
             Runtime.PyDict_SetItemString(dict, "CLR", ClrModuleReference);
             Runtime.PyDict_SetItemString(dict, "clr", ClrModuleReference);
+#if NEW
+            SetupNamespaceTracking();
+            SetupImportHook();
+#endif
+        }
+
+        static void SetupImportHook()
+        {
+            // Create the import hook module
+            var import_hook_module = Runtime.PyModule_New("clr.loader");
+
+            // Run the python code to create the module's classes.
+            var builtins = Runtime.PyEval_GetBuiltins();
+            var exec = Runtime.PyDict_GetItemString(builtins, "exec");
+            using var args = NewReference.DangerousFromPointer(Runtime.PyTuple_New(2));
+
+            var codeStr = Runtime.PyString_FromString(LoaderCode);
+            Runtime.PyTuple_SetItem(args.DangerousGetAddress(), 0, codeStr);
+            // PyTuple_SetItem steals a reference, mod_dict is borrowed.
+            var mod_dict = Runtime.PyModule_GetDict(import_hook_module);
+            Runtime.XIncref(mod_dict.DangerousGetAddress());
+            Runtime.PyTuple_SetItem(args.DangerousGetAddress(), 1, mod_dict.DangerousGetAddress());
+            Runtime.PyObject_Call(exec.DangerousGetAddress(), args.DangerousGetAddress(), IntPtr.Zero);
+
+            // Set as a sub-module of clr.
+            Runtime.XIncref(import_hook_module.DangerousGetAddress());
+            if(Runtime.PyModule_AddObject(ClrModuleReference, "loader", import_hook_module) != 0)
+            {
+                Runtime.XDecref(import_hook_module.DangerousGetAddress());
+                throw new PythonException();
+            }
+
+            // Finally, add the hook to the meta path
+            // var finder_inst = Runtime.PyDict_GetItemString(mod_dict, "finder_inst").DangerousGetAddressOrNull();
+            var findercls = Runtime.PyDict_GetItemString(mod_dict, "DotNetFinder");
+            var finderCtorArgs = Runtime.PyTuple_New(0);
+            var finder_inst = Runtime.PyObject_CallObject(findercls.DangerousGetAddress(), finderCtorArgs);
+            Runtime.XDecref(finderCtorArgs);
+            var metapath = Runtime.PySys_GetObject("meta_path");
+            Runtime.PyList_Append(metapath, finder_inst);
         }
 
 
@@ -94,7 +165,9 @@ namespace Python.Runtime
             }
 
             RestoreImport();
-
+#if NEW
+            TeardownNameSpaceTracking();
+#endif
             Runtime.XDecref(py_clr_module);
             py_clr_module = IntPtr.Zero;
 
@@ -119,6 +192,91 @@ namespace Python.Runtime
             storage.GetValue("py_clr_module", out py_clr_module);
             var rootHandle = storage.GetValue<IntPtr>("root");
             root = (CLRModule)ManagedType.GetManagedObject(rootHandle);
+        }
+
+        static void SetupNamespaceTracking()
+        {
+            var newset = Runtime.PySet_New(new BorrowedReference(IntPtr.Zero));
+            try
+            {
+                foreach (var ns in AssemblyManager.GetNamespaces())
+                {
+                    var pyNs = Runtime.PyString_FromString(ns);
+                    try
+                    {
+                        if (Runtime.PySet_Add(newset, new BorrowedReference(pyNs)) != 0)
+                        {
+                            throw new PythonException();
+                        }
+                    }
+                    finally
+                    {
+                        Runtime.XDecref(pyNs);
+                    }
+                }
+
+                if (Runtime.PyDict_SetItemString(root.dict, availableNsKey, newset.DangerousGetAddress()) != 0)
+                {
+                    throw new PythonException();
+                }
+            }
+            finally
+            {
+                newset.Dispose();
+            }
+
+            AssemblyManager.namespaceAdded += OnNamespaceAdded;
+            PythonEngine.AddShutdownHandler(() => AssemblyManager.namespaceAdded -= OnNamespaceAdded);
+        }
+
+        /// <summary>
+        /// Removes the set of available namespaces from the clr module and 
+        /// removes the callback on the OnNamespaceAdded event.
+        /// </summary>
+        static void TeardownNameSpaceTracking()
+        {
+            AssemblyManager.namespaceAdded -= OnNamespaceAdded;
+            // If the C# runtime isn't loaded, then there are no namespaces available
+            Runtime.PyDict_SetItemString(root.dict, availableNsKey, Runtime.PyNone);
+        }
+
+        static void OnNamespaceAdded(string name)
+        {
+            using (Py.GIL())
+            {
+                var pyNs = Runtime.PyString_FromString(name);
+                try
+                {
+                    var nsSet = Runtime.PyDict_GetItemString(new BorrowedReference(root.dict), availableNsKey);
+                    if (!nsSet.IsNull || nsSet.DangerousGetAddress() != Runtime.PyNone)
+                    {
+                        if (Runtime.PySet_Add(nsSet, new BorrowedReference(pyNs)) != 0)
+                        {
+                            throw new PythonException();
+                        }
+                    }
+                }
+                finally
+                {
+                    Runtime.XDecref(pyNs);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Because we use a proxy module for the clr module, we somtimes need
+        /// to force the py_clr_module to sync with the actual clr module's dict.
+        /// </summary>
+        internal static void UpdateCLRModuleDict()
+        {
+            root.InitializePreload();
+
+            // update the module dictionary with the contents of the root dictionary
+            root.LoadNames();
+            BorrowedReference py_mod_dict = Runtime.PyModule_GetDict(ClrModuleReference);
+            using var clr_dict = Runtime.PyObject_GenericGetDict(root.ObjectReference);
+
+            Runtime.PyDict_Update(py_mod_dict, clr_dict);
         }
 
         /// <summary>
@@ -173,6 +331,51 @@ namespace Python.Runtime
             }
             Runtime.XIncref(py_clr_module);
             return NewReference.DangerousFromPointer(py_clr_module);
+        }
+
+        /// <summary>
+        /// The hook to import a CLR module into Python. Returns a new reference
+        /// to the module.
+        /// </summary>
+        public static ModuleObject Import(string modname)
+        {
+            // Traverse the qualified module name to get the named module. 
+            // Note that if
+            // we are running in interactive mode we pre-load the names in
+            // each module, which is often useful for introspection. If we
+            // are not interactive, we stick to just-in-time creation of
+            // objects at lookup time, which is much more efficient.
+            // NEW: The clr got a new module variable preload. You can
+            // enable preloading in a non-interactive python processing by
+            // setting clr.preload = True
+
+            ModuleObject head = null;
+            ModuleObject tail = root;
+            root.InitializePreload();
+
+            string[] names = modname.Split('.');
+            foreach (string name in names)
+            {
+                ManagedType mt = tail.GetAttribute(name, true);
+                if (!(mt is ModuleObject))
+                {
+                    Exceptions.SetError(Exceptions.ImportError, $"'{name}' Is not a ModuleObject.");
+                    throw new PythonException();
+                }
+                if (head == null)
+                {
+                    head = (ModuleObject)mt;
+                }
+                tail = (ModuleObject)mt;
+                if (CLRModule.preload)
+                {
+                    tail.LoadNames();
+                }
+            }
+            Console.WriteLine($"imported: {modname}");
+            Console.Out.Flush();
+            tail.IncrRefCount();
+            return tail;
         }
 
         /// <summary>

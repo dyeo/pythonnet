@@ -20,6 +20,12 @@ namespace Python.Runtime
         internal IntPtr dict;
         internal BorrowedReference DictRef => new BorrowedReference(dict);
         protected string _namespace;
+        private IntPtr __all__ = IntPtr.Zero;
+
+        // Attributes to be set on the module according to PEP302 and 451
+        // by the import machinery.
+        static readonly HashSet<string> settableAttributes = 
+            new HashSet<string> {"__spec__", "__file__", "__name__", "__path__", "__loader__", "__package__"};
 
         public ModuleObject(string name)
         {
@@ -47,7 +53,7 @@ namespace Python.Runtime
             var dictRef = Runtime.PyObject_GenericGetDict(ObjectReference);
             PythonException.ThrowIfIsNull(dictRef);
             dict = dictRef.DangerousMoveToPointer();
-
+            __all__ = Runtime.PyList_New(0);
             using var pyname = NewReference.DangerousFromPointer(Runtime.PyString_FromString(moduleName));
             using var pyfilename = NewReference.DangerousFromPointer(Runtime.PyString_FromString(filename));
             using var pydocstring = NewReference.DangerousFromPointer(Runtime.PyString_FromString(docstring));
@@ -181,7 +187,23 @@ namespace Python.Runtime
                 {
                     continue;
                 }
-                GetAttribute(name, true);
+
+                if(GetAttribute(name, true) != null)
+                {
+                    // if it's a valid attribute, add it to __all__
+                    var pyname = Runtime.PyString_FromString(name);
+                    try
+                    {
+                        if (Runtime.PyList_Append(new BorrowedReference(__all__), pyname) != 0)
+                        {
+                            throw new PythonException();
+                        }
+                    }
+                    finally
+                    {
+                        Runtime.XDecref(pyname);
+                    }
+                }
             }
         }
 
@@ -263,6 +285,13 @@ namespace Python.Runtime
                 return self.dict;
             }
 
+            if (name == "__all__")
+            {
+                self.LoadNames();
+                Runtime.XIncref(self.__all__);
+                return self.__all__;
+            }
+
             ManagedType attr = null;
 
             try
@@ -326,6 +355,25 @@ namespace Python.Runtime
             }
             self.cache.Clear();
             return 0;
+        }
+
+        /// <summary>
+        /// Override the setattr implementation.
+        /// This is needed because the import mechanics need
+        /// to set a few attributes
+        /// </summary>
+        [ForbidPythonThreads]
+        public new static int tp_setattro(IntPtr ob, IntPtr key, IntPtr val)
+        {
+            var managedKey = Runtime.GetManagedString(key);
+            if ((settableAttributes.Contains(managedKey)) || 
+                (ManagedType.GetManagedObject(val)?.GetType() == typeof(ModuleObject)) )
+            {
+                var self = (ModuleObject)ManagedType.GetManagedObject(ob);
+                return Runtime.PyDict_SetItem(self.dict, key, val);
+            }
+
+            return ExtensionType.tp_setattro(ob, key, val);
         }
 
         protected override void OnSave(InterDomainContext context)
@@ -487,7 +535,8 @@ namespace Python.Runtime
             {
                 throw new FileNotFoundException($"Unable to find assembly '{name}'.");
             }
-
+            // Classes that are not in a namespace needs an extra nudge to be found.
+            ImportHook.UpdateCLRModuleDict();
             return assembly;
         }
 
@@ -533,6 +582,32 @@ namespace Python.Runtime
                 }
             }
             return names;
+        }
+
+        /// <summary>
+        /// Note: This should *not* be called directly.
+        /// The function that get/import a CLR assembly as a python module.
+        /// This function should only be called by the import machinery as seen
+        /// in importhook.cs
+        /// </summary>
+        /// <param name="spec">A ModuleSpec Python object</param>
+        /// <returns>A new reference to the imported module, as a PyObject.</returns>
+        [ModuleFunction]
+        [ForbidPythonThreads]
+        public static PyObject _load_clr_module(PyObject spec)
+        {
+            ModuleObject mod = null;
+            IntPtr modptr = IntPtr.Zero;
+            using (var modname = spec.GetAttr("name"))
+            {
+                mod = ImportHook.Import(modname.ToString());
+                // using var args = NewReference.DangerousFromPointer(Runtime.PyTuple_New(1));
+                // Runtime.XIncref(modname.Handle);
+                // Runtime.PyTuple_SetItem(args.DangerousGetAddress(), 0, modname.Handle);
+                // modptr = ImportHook.__import__(IntPtr.Zero, args.DangerousGetAddress(), IntPtr.Zero);
+            }
+            // return new PyObject(modptr)
+            return new PyObject(mod.pyHandle);
         }
     }
 }
