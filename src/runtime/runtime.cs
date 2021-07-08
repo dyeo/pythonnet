@@ -34,6 +34,12 @@ namespace Python.Runtime
 #error You must define one of PYTHON36 to PYTHON39
 #endif
 
+#if ANDROID
+        internal const string dllPre = "lib";
+#else
+        internal const string dllPre = "";
+#endif
+
 #if WINDOWS
         internal const string dllBase = "python3" + _minor;
 #else
@@ -56,9 +62,11 @@ namespace Python.Runtime
         // binary substitution of different Python.Runtime.dll builds in a target application.
 
         public static readonly string PythonDLL = _PythonDll;
-
+#if !ANDROID
         internal const string _PythonDll = "__Internal";
-
+#else
+        internal const string _PythonDll = dllPre + dllBase + dllWithPyDebug + dllWithPyMalloc;
+#endif
         // set to true when python is finalizing
         internal static object IsFinalizingLock = new object();
         internal static bool IsFinalizing;
